@@ -1,10 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { initializeApp, getApps, getApp } from "firebase/app";
-
-// --- THÊM DÒNG NÀY VÀO ĐÂY ---
 import "./index.css";
-// -----------------------------
-
 import {
   getAuth,
   signInAnonymously,
@@ -44,10 +40,6 @@ import {
   Users,
   ArrowRightLeft,
 } from "lucide-react";
-
-// --- FIREBASE SETUP ---
-// Bạn nhớ giữ nguyên phần config Firebase của riêng bạn ở đây nhé!
-// Nếu lỡ xóa, hãy vào Firebase Console copy lại.
 const firebaseConfig = {
   apiKey: "AIzaSyCRKW6fQwJqj2bSfuAXc5Nr259KVmzhic8",
   authDomain: "lop-hoc-vui-ve2.firebaseapp.com",
