@@ -1,5 +1,10 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { initializeApp, getApps, getApp } from "firebase/app";
+
+// --- THÊM DÒNG NÀY VÀO ĐÂY ---
+import "./index.css";
+// -----------------------------
+
 import {
   getAuth,
   signInAnonymously,
