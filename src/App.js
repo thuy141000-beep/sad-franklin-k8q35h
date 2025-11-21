@@ -188,7 +188,7 @@ const LoginScreen = ({ dbState, onLogin }) => {
           <h1 className="text-2xl font-bold text-gray-800">
             Thống kê tình hình 12/4
           </h1>
-          <p className="text-gray-500 text-sm">Chuyển tổ </p>
+          <p className="text-gray-500 text-sm">By Nguyễn Hoàng Brush</p>
         </div>
         {!selectedUser ? (
           <>
