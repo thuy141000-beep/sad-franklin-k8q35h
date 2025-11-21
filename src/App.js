@@ -186,9 +186,9 @@ const LoginScreen = ({ dbState, onLogin }) => {
       <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">
-            Lớp Học Vui Vẻ V11
+            Thống kê tình hình 12/4
           </h1>
-          <p className="text-gray-500 text-sm">Chuyển tổ giữ nguyên dữ liệu</p>
+          <p className="text-gray-500 text-sm">Chuyển tổ </p>
         </div>
         {!selectedUser ? (
           <>
