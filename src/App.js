@@ -1,34 +1,34 @@
-import React, { useState, useEffect, useMemo } from "react";
-import { initializeApp, getApps, getApp } from "firebase/app";
-import {
-  getAuth,
-  signInAnonymously,
-  onAuthStateChanged,
-  signInWithCustomToken,
-} from "firebase/auth";
-import {
-  getFirestore,
-  doc,
-  setDoc,
+import React, { useState, useEffect, useMemo } from 'react';
+import { initializeApp, getApps, getApp } from 'firebase/app';
+import { 
+  getAuth, 
+  signInAnonymously, 
+  onAuthStateChanged, 
+  signInWithCustomToken 
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  doc, 
+  setDoc, 
   onSnapshot,
-  updateDoc,
-} from "firebase/firestore";
-import {
-  ClipboardList,
-  ChevronDown,
-  ChevronUp,
-  LogOut,
-  UserCheck,
-  Gavel,
-  Trash2,
-  Plus,
-  Save,
-  X,
-  Calendar,
-  PlusCircle,
-  Search,
-  Key,
-  School,
+  updateDoc
+} from 'firebase/firestore';
+import { 
+  ClipboardList, 
+  ChevronDown, 
+  ChevronUp, 
+  LogOut, 
+  UserCheck, 
+  Gavel, 
+  Trash2, 
+  Plus, 
+  Save, 
+  X, 
+  Calendar, 
+  PlusCircle, 
+  Search, 
+  Key, 
+  School, 
   User,
   ShieldAlert,
   UserPlus,
@@ -37,10 +37,12 @@ import {
   ToggleLeft,
   ToggleRight,
   Users,
-  ArrowRightLeft,
-} from "lucide-react";
+  ArrowRightLeft
+} from 'lucide-react';
 
 // --- FIREBASE SETUP ---
+// Bạn nhớ giữ nguyên phần config Firebase của riêng bạn ở đây nhé!
+// Nếu lỡ xóa, hãy vào Firebase Console copy lại.
 const firebaseConfig = {
   apiKey: "AIzaSyCRKW6fQwJqj2bSfuAXc5Nr259KVmzhic8",
   authDomain: "lop-hoc-vui-ve2.firebaseapp.com",
@@ -50,134 +52,75 @@ const firebaseConfig = {
   appId: "1:454777169300:web:ebe2542d74b779eb8b1b81",
 };
 
+// Khởi tạo Firebase an toàn
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
-const appId = typeof __app_id !== "undefined" ? __app_id : "lop12-4-2025";
+// Thay đổi ID lớp học của bạn ở đây nếu cần
+const appId = "lop12-4-2025"; 
 
 // --- CONSTANTS ---
 const ROLES = {
-  TEACHER: "teacher",
-  ADMIN: "admin",
-  MANAGER: "manager",
-  STUDENT: "student",
+  TEACHER: 'teacher',
+  ADMIN: 'admin',     
+  MANAGER: 'manager', 
+  STUDENT: 'student'
 };
 
-// Default permissions for MANAGERS
 const DEFAULT_MANAGER_PERMISSIONS = {
-  allowAdd: false,
-  allowDelete: false,
-  allowEditName: true,
+  allowAdd: false,      
+  allowDelete: false,   
+  allowEditName: true,  
   allowResetPin: true,
-  allowMoveGroup: false, // New permission: Allow manager to move students?
+  allowMoveGroup: false
 };
 
 const DEFAULT_RULES = [
-  { id: "r1", label: "Đi học muộn", fine: 5000, points: -2, type: "penalty" },
-  {
-    id: "r2",
-    label: "Không làm bài tập",
-    fine: 10000,
-    points: -5,
-    type: "penalty",
-  },
-  {
-    id: "r3",
-    label: "Nói chuyện riêng",
-    fine: 2000,
-    points: -2,
-    type: "penalty",
-  },
-  {
-    id: "b1",
-    label: "Phát biểu xây dựng bài",
-    fine: 0,
-    points: 2,
-    type: "bonus",
-  },
-  { id: "b2", label: "Đạt điểm 9, 10", fine: 0, points: 5, type: "bonus" },
+  { id: 'r1', label: 'Đi học muộn', fine: 5000, points: -2, type: 'penalty' },
+  { id: 'r2', label: 'Không làm bài tập', fine: 10000, points: -5, type: 'penalty' },
+  { id: 'r3', label: 'Nói chuyện riêng', fine: 2000, points: -2, type: 'penalty' },
+  { id: 'b1', label: 'Phát biểu xây dựng bài', fine: 0, points: 2, type: 'bonus' },
+  { id: 'b2', label: 'Đạt điểm 9, 10', fine: 0, points: 5, type: 'bonus' },
 ];
 
 const getRating = (score) => {
-  if (score > 80) return { label: "Tốt", color: "bg-green-100 text-green-700" };
-  if (score >= 66) return { label: "Khá", color: "bg-blue-100 text-blue-700" };
-  if (score >= 50)
-    return { label: "TB", color: "bg-yellow-100 text-yellow-700" };
-  if (score >= 0)
-    return { label: "Yếu", color: "bg-orange-100 text-orange-700" };
-  return { label: "Kém", color: "bg-red-100 text-red-700" };
+  if (score > 80) return { label: 'Tốt', color: 'bg-green-100 text-green-700' };
+  if (score >= 66) return { label: 'Khá', color: 'bg-blue-100 text-blue-700' };
+  if (score >= 50) return { label: 'TB', color: 'bg-yellow-100 text-yellow-700' };
+  if (score >= 0) return { label: 'Yếu', color: 'bg-orange-100 text-orange-700' };
+  return { label: 'Kém', color: 'bg-red-100 text-red-700' };
 };
 
 // --- COMPONENTS ---
 
 const LoginScreen = ({ dbState, onLogin }) => {
-  const [activeTab, setActiveTab] = useState("student");
+  const [activeTab, setActiveTab] = useState('student');
   const [selectedUser, setSelectedUser] = useState(null);
-  const [pin, setPin] = useState("");
-  const [error, setError] = useState("");
-  const [searchStudent, setSearchStudent] = useState("");
+  const [pin, setPin] = useState('');
+  const [error, setError] = useState('');
+  const [searchStudent, setSearchStudent] = useState('');
 
-  const admins = Object.values(dbState.users).filter(
-    (u) => u.role === ROLES.TEACHER || u.role === ROLES.ADMIN
-  );
-  const managers = Object.values(dbState.users).filter(
-    (u) => u.role === ROLES.MANAGER
-  );
-  const students = Object.values(dbState.users).filter(
-    (u) => u.role === ROLES.STUDENT
-  );
+  const admins = Object.values(dbState.users).filter(u => u.role === ROLES.TEACHER || u.role === ROLES.ADMIN);
+  const managers = Object.values(dbState.users).filter(u => u.role === ROLES.MANAGER);
+  const students = Object.values(dbState.users).filter(u => u.role === ROLES.STUDENT);
 
   const handleLogin = () => {
     if (selectedUser && pin === selectedUser.pin) onLogin(selectedUser);
-    else setError("Mã PIN không chính xác");
+    else setError('Mã PIN không chính xác');
   };
 
   const renderUserList = (list) => (
     <div className="grid grid-cols-2 gap-3 max-h-60 overflow-y-auto">
       {list
-        .filter((u) =>
-          u.name.toLowerCase().includes(searchStudent.toLowerCase())
-        )
-        .map((user) => (
-          <button
-            key={user.id}
-            onClick={() => {
-              setSelectedUser(user);
-              setError("");
-              setPin("");
-            }}
-            className={`p-3 border rounded-xl flex flex-col items-center gap-2 transition-all ${
-              selectedUser?.id === user.id
-                ? "border-indigo-500 bg-indigo-50"
-                : "border-gray-200 hover:bg-gray-50"
-            }`}
-          >
-            <div
-              className={`p-2 rounded-full ${
-                user.role === ROLES.TEACHER
-                  ? "bg-purple-100 text-purple-600"
-                  : user.role === ROLES.ADMIN
-                  ? "bg-red-100 text-red-600"
-                  : user.role === ROLES.MANAGER
-                  ? "bg-blue-100 text-blue-600"
-                  : "bg-gray-100 text-gray-600"
-              }`}
-            >
-              {user.role === ROLES.TEACHER ? (
-                <School size={20} />
-              ) : user.role === ROLES.ADMIN ? (
-                <ShieldAlert size={20} />
-              ) : user.role === ROLES.MANAGER ? (
-                <UserCheck size={20} />
-              ) : (
-                <User size={20} />
-              )}
-            </div>
-            <span className="font-medium text-sm text-gray-700 truncate w-full text-center">
-              {user.name}
-            </span>
-          </button>
-        ))}
+        .filter(u => u.name.toLowerCase().includes(searchStudent.toLowerCase()))
+        .map(user => (
+        <button key={user.id} onClick={() => { setSelectedUser(user); setError(''); setPin(''); }} className={`p-3 border rounded-xl flex flex-col items-center gap-2 transition-all ${selectedUser?.id === user.id ? 'border-indigo-500 bg-indigo-50' : 'border-gray-200 hover:bg-gray-50'}`}>
+          <div className={`p-2 rounded-full ${user.role === ROLES.TEACHER ? 'bg-purple-100 text-purple-600' : user.role === ROLES.ADMIN ? 'bg-red-100 text-red-600' : user.role === ROLES.MANAGER ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-600'}`}>
+            {user.role === ROLES.TEACHER ? <School size={20}/> : user.role === ROLES.ADMIN ? <ShieldAlert size={20}/> : user.role === ROLES.MANAGER ? <UserCheck size={20}/> : <User size={20}/>}
+          </div>
+          <span className="font-medium text-sm text-gray-700 truncate w-full text-center">{user.name}</span>
+        </button>
+      ))}
     </div>
   );
 
@@ -185,113 +128,29 @@ const LoginScreen = ({ dbState, onLogin }) => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-600 to-blue-500 p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">
-            Lớp Học Vui Vẻ V11
-          </h1>
+          <h1 className="text-2xl font-bold text-gray-800">Lớp Học Vui Vẻ V11</h1>
           <p className="text-gray-500 text-sm">Chuyển tổ giữ nguyên dữ liệu</p>
         </div>
         {!selectedUser ? (
           <>
             <div className="flex border-b border-gray-200 mb-4">
-              <button
-                onClick={() => setActiveTab("student")}
-                className={`flex-1 pb-2 text-xs sm:text-sm font-medium ${
-                  activeTab === "student"
-                    ? "text-indigo-600 border-b-2 border-indigo-600"
-                    : "text-gray-500"
-                }`}
-              >
-                Học sinh
-              </button>
-              <button
-                onClick={() => setActiveTab("manager")}
-                className={`flex-1 pb-2 text-xs sm:text-sm font-medium ${
-                  activeTab === "manager"
-                    ? "text-indigo-600 border-b-2 border-indigo-600"
-                    : "text-gray-500"
-                }`}
-              >
-                Tổ trưởng
-              </button>
-              <button
-                onClick={() => setActiveTab("admin")}
-                className={`flex-1 pb-2 text-xs sm:text-sm font-medium ${
-                  activeTab === "admin"
-                    ? "text-indigo-600 border-b-2 border-indigo-600"
-                    : "text-gray-500"
-                }`}
-              >
-                Quản trị
-              </button>
+              <button onClick={() => setActiveTab('student')} className={`flex-1 pb-2 text-xs sm:text-sm font-medium ${activeTab === 'student' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500'}`}>Học sinh</button>
+              <button onClick={() => setActiveTab('manager')} className={`flex-1 pb-2 text-xs sm:text-sm font-medium ${activeTab === 'manager' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500'}`}>Tổ trưởng</button>
+              <button onClick={() => setActiveTab('admin')} className={`flex-1 pb-2 text-xs sm:text-sm font-medium ${activeTab === 'admin' ? 'text-indigo-600 border-b-2 border-indigo-600' : 'text-gray-500'}`}>Quản trị</button>
             </div>
-            {activeTab === "student" && (
-              <div className="mb-3 relative">
-                <Search
-                  size={16}
-                  className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"
-                />
-                <input
-                  className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-indigo-200"
-                  placeholder="Tìm tên học sinh..."
-                  value={searchStudent}
-                  onChange={(e) => setSearchStudent(e.target.value)}
-                />
-              </div>
-            )}
-            {activeTab === "admin" && renderUserList(admins)}
-            {activeTab === "manager" && renderUserList(managers)}
-            {activeTab === "student" && renderUserList(students)}
+            {activeTab === 'student' && (<div className="mb-3 relative"><Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400"/><input className="w-full pl-9 pr-3 py-2 border rounded-lg text-sm bg-gray-50 focus:bg-white outline-none focus:ring-2 focus:ring-indigo-200" placeholder="Tìm tên học sinh..." value={searchStudent} onChange={e => setSearchStudent(e.target.value)} /></div>)}
+            {activeTab === 'admin' && renderUserList(admins)}
+            {activeTab === 'manager' && renderUserList(managers)}
+            {activeTab === 'student' && renderUserList(students)}
           </>
         ) : (
           <div className="space-y-5">
-            <div className="flex items-center gap-3 bg-indigo-50 p-3 rounded-lg">
-              <div className="bg-indigo-100 p-2 rounded-full">
-                {selectedUser.role === ROLES.TEACHER ? (
-                  <School size={20} className="text-indigo-600" />
-                ) : (
-                  <User size={20} className="text-indigo-600" />
-                )}
-              </div>
-              <div>
-                <p className="font-bold text-gray-800 text-sm">
-                  {selectedUser.name}
-                </p>
-                <p className="text-xs text-gray-500 uppercase">
-                  {selectedUser.role}
-                </p>
-              </div>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-gray-700 mb-2">
-                Nhập mã PIN
-              </label>
-              <input
-                type="password"
-                value={pin}
-                onChange={(e) => setPin(e.target.value)}
-                className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-center text-xl tracking-widest"
-                maxLength={4}
-                placeholder="****"
-                autoFocus
-              />
-              {error && (
-                <p className="text-red-500 text-xs mt-2 text-center">{error}</p>
-              )}
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setSelectedUser(null)}
-                className="flex-1 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 text-sm font-medium"
-              >
-                Quay lại
-              </button>
-              <button
-                onClick={handleLogin}
-                className="flex-1 py-2 text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 text-sm font-medium shadow-lg shadow-indigo-200"
-              >
-                Đăng nhập
-              </button>
-            </div>
+             <div className="flex items-center gap-3 bg-indigo-50 p-3 rounded-lg">
+                <div className="bg-indigo-100 p-2 rounded-full">{selectedUser.role === ROLES.TEACHER ? <School size={20} className="text-indigo-600"/> : <User size={20} className="text-indigo-600"/>}</div>
+                <div><p className="font-bold text-gray-800 text-sm">{selectedUser.name}</p><p className="text-xs text-gray-500 uppercase">{selectedUser.role}</p></div>
+             </div>
+             <div><label className="block text-xs font-medium text-gray-700 mb-2">Nhập mã PIN</label><input type="password" value={pin} onChange={(e) => setPin(e.target.value)} className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none text-center text-xl tracking-widest" maxLength={4} placeholder="****" autoFocus/>{error && <p className="text-red-500 text-xs mt-2 text-center">{error}</p>}</div>
+             <div className="flex gap-3"><button onClick={() => setSelectedUser(null)} className="flex-1 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 text-sm font-medium">Quay lại</button><button onClick={handleLogin} className="flex-1 py-2 text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 text-sm font-medium shadow-lg shadow-indigo-200">Đăng nhập</button></div>
           </div>
         )}
       </div>
@@ -299,68 +158,48 @@ const LoginScreen = ({ dbState, onLogin }) => {
   );
 };
 
-// 2. Account Manager (With Move Group Feature)
-const AccountManager = ({
-  users,
-  updateData,
-  currentUser,
-  managerPermissions,
-}) => {
-  const [searchTerm, setSearchTerm] = useState("");
+const AccountManager = ({ users, updateData, currentUser, managerPermissions }) => {
+  const [searchTerm, setSearchTerm] = useState('');
   const [editingId, setEditingId] = useState(null);
-  const [editMode, setEditMode] = useState(null); // 'pin', 'name', 'group'
-  const [editValue, setEditValue] = useState("");
+  const [editMode, setEditMode] = useState(null); 
+  const [editValue, setEditValue] = useState('');
   const [isAdding, setIsAdding] = useState(false);
-  const [newUser, setNewUser] = useState({
-    name: "",
-    group: currentUser.role === ROLES.MANAGER ? currentUser.group : 1,
-  });
+  const [newUser, setNewUser] = useState({ name: '', group: currentUser.role === ROLES.MANAGER ? currentUser.group : 1 });
 
   const isTeacher = currentUser.role === ROLES.TEACHER;
   const isAdmin = currentUser.role === ROLES.ADMIN;
   const isManager = currentUser.role === ROLES.MANAGER;
-  const canViewConfig = isTeacher || isAdmin;
+  const canViewConfig = isTeacher || isAdmin; 
 
-  // Permissions
-  const canAddUser =
-    isTeacher || isAdmin || (isManager && managerPermissions.allowAdd);
-
+  const canAddUser = isTeacher || isAdmin || (isManager && managerPermissions.allowAdd);
+  
   const checkPermission = (action, targetUser) => {
     if (isTeacher || isAdmin) return true;
     if (isManager) {
-      if (
-        targetUser.role !== ROLES.STUDENT ||
-        targetUser.group !== currentUser.group
-      )
-        return false;
-      if (action === "delete") return managerPermissions.allowDelete;
-      if (action === "editName") return managerPermissions.allowEditName;
-      if (action === "resetPin") return managerPermissions.allowResetPin;
-      if (action === "moveGroup") return managerPermissions.allowMoveGroup;
+      if (targetUser.role !== ROLES.STUDENT || targetUser.group !== currentUser.group) return false;
+      if (action === 'delete') return managerPermissions.allowDelete;
+      if (action === 'editName') return managerPermissions.allowEditName;
+      if (action === 'resetPin') return managerPermissions.allowResetPin;
+      if (action === 'moveGroup') return managerPermissions.allowMoveGroup;
     }
     return false;
   };
 
-  // ACTIONS
   const handleSaveEdit = (userId) => {
     if (!String(editValue).trim()) return;
     let updatedUser = { ...users[userId] };
-
-    if (editMode === "pin") {
+    if (editMode === 'pin') {
       if (editValue.length < 4) return alert("PIN cần 4 ký tự");
       updatedUser.pin = editValue;
       alert("Đổi PIN thành công");
-    } else if (editMode === "name") {
+    } else if (editMode === 'name') {
       updatedUser.name = editValue;
-    } else if (editMode === "group") {
+    } else if (editMode === 'group') {
       updatedUser.group = Number(editValue);
       alert(`Đã chuyển thành viên sang Tổ ${editValue}`);
     }
-
     updateData({ users: { ...users, [userId]: updatedUser } });
-    setEditingId(null);
-    setEditMode(null);
-    setEditValue("");
+    setEditingId(null); setEditMode(null); setEditValue('');
   };
 
   const handleDeleteUser = (userId) => {
@@ -374,16 +213,9 @@ const AccountManager = ({
   const handleAddUser = () => {
     if (!newUser.name) return alert("Nhập tên");
     const id = `s_${Date.now()}`;
-    const newStudent = {
-      id,
-      name: newUser.name,
-      group: Number(newUser.group),
-      role: ROLES.STUDENT,
-      pin: "0000",
-    };
+    const newStudent = { id, name: newUser.name, group: Number(newUser.group), role: ROLES.STUDENT, pin: '0000' };
     updateData({ users: { ...users, [id]: newStudent } });
-    setIsAdding(false);
-    setNewUser({ name: "", group: isManager ? currentUser.group : 1 });
+    setIsAdding(false); setNewUser({ name: '', group: isManager ? currentUser.group : 1 });
     alert("Đã thêm!");
   };
 
@@ -393,15 +225,11 @@ const AccountManager = ({
     updateData({ managerPermissions: newPerms });
   };
 
-  const displayedUsers = Object.values(users)
-    .filter((u) => {
-      if (!u.name.toLowerCase().includes(searchTerm.toLowerCase()))
-        return false;
-      if (isManager)
-        return u.group === currentUser.group && u.role === ROLES.STUDENT;
+  const displayedUsers = Object.values(users).filter(u => {
+      if (!u.name.toLowerCase().includes(searchTerm.toLowerCase())) return false;
+      if (isManager) return u.group === currentUser.group && u.role === ROLES.STUDENT;
       return true;
-    })
-    .sort((a, b) => {
+    }).sort((a, b) => {
       if (a.group !== b.group) return a.group - b.group;
       return a.role === ROLES.TEACHER ? -1 : 1;
     });
@@ -410,824 +238,193 @@ const AccountManager = ({
     <div className="bg-white rounded-xl shadow-sm overflow-hidden fade-in">
       {canViewConfig && (
         <div className="bg-blue-50 p-4 border-b border-blue-100">
-          <h3 className="font-bold text-blue-900 mb-3 flex items-center gap-2">
-            <Users size={18} /> Cấu hình quyền hạn Tổ trưởng
-          </h3>
+          <h3 className="font-bold text-blue-900 mb-3 flex items-center gap-2"><Users size={18}/> Cấu hình quyền hạn Tổ trưởng</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-            <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100 shadow-sm">
-              <span className="text-sm text-gray-700">Thêm thành viên</span>
-              <button
-                onClick={() => togglePermission("allowAdd")}
-                className={
-                  managerPermissions.allowAdd
-                    ? "text-green-600"
-                    : "text-gray-300"
-                }
-              >
-                {managerPermissions.allowAdd ? (
-                  <ToggleRight size={28} />
-                ) : (
-                  <ToggleLeft size={28} />
-                )}
-              </button>
-            </div>
-            <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100 shadow-sm">
-              <span className="text-sm text-gray-700">Xóa thành viên</span>
-              <button
-                onClick={() => togglePermission("allowDelete")}
-                className={
-                  managerPermissions.allowDelete
-                    ? "text-green-600"
-                    : "text-gray-300"
-                }
-              >
-                {managerPermissions.allowDelete ? (
-                  <ToggleRight size={28} />
-                ) : (
-                  <ToggleLeft size={28} />
-                )}
-              </button>
-            </div>
-            <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100 shadow-sm">
-              <span className="text-sm text-gray-700">Sửa tên</span>
-              <button
-                onClick={() => togglePermission("allowEditName")}
-                className={
-                  managerPermissions.allowEditName
-                    ? "text-green-600"
-                    : "text-gray-300"
-                }
-              >
-                {managerPermissions.allowEditName ? (
-                  <ToggleRight size={28} />
-                ) : (
-                  <ToggleLeft size={28} />
-                )}
-              </button>
-            </div>
-            <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100 shadow-sm">
-              <span className="text-sm text-gray-700">Đổi PIN</span>
-              <button
-                onClick={() => togglePermission("allowResetPin")}
-                className={
-                  managerPermissions.allowResetPin
-                    ? "text-green-600"
-                    : "text-gray-300"
-                }
-              >
-                {managerPermissions.allowResetPin ? (
-                  <ToggleRight size={28} />
-                ) : (
-                  <ToggleLeft size={28} />
-                )}
-              </button>
-            </div>
-            <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100 shadow-sm">
-              <span className="text-sm text-gray-700">Chuyển Tổ</span>
-              <button
-                onClick={() => togglePermission("allowMoveGroup")}
-                className={
-                  managerPermissions.allowMoveGroup
-                    ? "text-green-600"
-                    : "text-gray-300"
-                }
-              >
-                {managerPermissions.allowMoveGroup ? (
-                  <ToggleRight size={28} />
-                ) : (
-                  <ToggleLeft size={28} />
-                )}
-              </button>
-            </div>
+            <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100 shadow-sm"><span className="text-sm text-gray-700">Thêm thành viên</span><button onClick={() => togglePermission('allowAdd')} className={managerPermissions.allowAdd ? "text-green-600" : "text-gray-300"}>{managerPermissions.allowAdd ? <ToggleRight size={28}/> : <ToggleLeft size={28}/>}</button></div>
+            <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100 shadow-sm"><span className="text-sm text-gray-700">Xóa thành viên</span><button onClick={() => togglePermission('allowDelete')} className={managerPermissions.allowDelete ? "text-green-600" : "text-gray-300"}>{managerPermissions.allowDelete ? <ToggleRight size={28}/> : <ToggleLeft size={28}/>}</button></div>
+            <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100 shadow-sm"><span className="text-sm text-gray-700">Sửa tên</span><button onClick={() => togglePermission('allowEditName')} className={managerPermissions.allowEditName ? "text-green-600" : "text-gray-300"}>{managerPermissions.allowEditName ? <ToggleRight size={28}/> : <ToggleLeft size={28}/>}</button></div>
+            <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100 shadow-sm"><span className="text-sm text-gray-700">Đổi PIN</span><button onClick={() => togglePermission('allowResetPin')} className={managerPermissions.allowResetPin ? "text-green-600" : "text-gray-300"}>{managerPermissions.allowResetPin ? <ToggleRight size={28}/> : <ToggleLeft size={28}/>}</button></div>
+            <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100 shadow-sm"><span className="text-sm text-gray-700">Chuyển Tổ</span><button onClick={() => togglePermission('allowMoveGroup')} className={managerPermissions.allowMoveGroup ? "text-green-600" : "text-gray-300"}>{managerPermissions.allowMoveGroup ? <ToggleRight size={28}/> : <ToggleLeft size={28}/>}</button></div>
           </div>
         </div>
       )}
-
-      <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-        <div>
-          <h2 className="font-bold text-gray-800">Danh sách thành viên</h2>
-          <p className="text-xs text-gray-500">
-            {isManager ? `Tổ ${currentUser.group}` : "Toàn lớp"}
-          </p>
-        </div>
-        {canAddUser && (
-          <button
-            onClick={() => setIsAdding(!isAdding)}
-            className="bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 text-xs flex items-center gap-1"
-          >
-            <UserPlus size={16} /> Thêm
-          </button>
-        )}
-      </div>
-
-      {isAdding && (
-        <div className="p-4 bg-indigo-50 border-b border-indigo-100 animate-slideDown">
-          <h3 className="text-sm font-bold text-indigo-800 mb-2">
-            Thêm thành viên mới
-          </h3>
-          <div className="flex gap-2">
-            <input
-              className="flex-1 p-2 text-sm border rounded"
-              placeholder="Họ và tên"
-              value={newUser.name}
-              onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
-            />
-            {!isManager && (
-              <select
-                className="p-2 text-sm border rounded"
-                value={newUser.group}
-                onChange={(e) =>
-                  setNewUser({ ...newUser, group: e.target.value })
-                }
-              >
-                {[1, 2, 3, 4].map((g) => (
-                  <option key={g} value={g}>
-                    Tổ {g}
-                  </option>
-                ))}
-              </select>
-            )}
-            <button
-              onClick={handleAddUser}
-              className="bg-green-600 text-white px-4 py-2 rounded text-sm font-medium"
-            >
-              Lưu
-            </button>
-          </div>
-        </div>
-      )}
-
-      <div className="p-2 relative">
-        <Search size={14} className="absolute left-5 top-5 text-gray-400" />
-        <input
-          className="w-full pl-9 pr-3 py-2 text-sm border rounded-lg bg-gray-50 mb-2"
-          placeholder="Tìm..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-        />
-      </div>
-
+      <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50"><div><h2 className="font-bold text-gray-800">Danh sách thành viên</h2><p className="text-xs text-gray-500">{isManager ? `Tổ ${currentUser.group}` : 'Toàn lớp'}</p></div>{canAddUser && <button onClick={() => setIsAdding(!isAdding)} className="bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 text-xs flex items-center gap-1"><UserPlus size={16}/> Thêm</button>}</div>
+      {isAdding && (<div className="p-4 bg-indigo-50 border-b border-indigo-100 animate-slideDown"><h3 className="text-sm font-bold text-indigo-800 mb-2">Thêm thành viên mới</h3><div className="flex gap-2"><input className="flex-1 p-2 text-sm border rounded" placeholder="Họ và tên" value={newUser.name} onChange={e => setNewUser({...newUser, name: e.target.value})} />{!isManager && (<select className="p-2 text-sm border rounded" value={newUser.group} onChange={e => setNewUser({...newUser, group: e.target.value})}>{[1,2,3,4].map(g => <option key={g} value={g}>Tổ {g}</option>)}</select>)}<button onClick={handleAddUser} className="bg-green-600 text-white px-4 py-2 rounded text-sm font-medium">Lưu</button></div></div>)}
+      <div className="p-2 relative"><Search size={14} className="absolute left-5 top-5 text-gray-400"/><input className="w-full pl-9 pr-3 py-2 text-sm border rounded-lg bg-gray-50 mb-2" placeholder="Tìm..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
       <div className="max-h-[500px] overflow-y-auto p-2">
-        {displayedUsers.map((user) => {
-          return (
-            <div
-              key={user.id}
-              className="flex justify-between items-center p-3 hover:bg-gray-50 rounded-lg border-b border-gray-50 last:border-0 group"
-            >
+         {displayedUsers.map(user => (
+            <div key={user.id} className="flex justify-between items-center p-3 hover:bg-gray-50 rounded-lg border-b border-gray-50 last:border-0 group">
               <div className="flex items-center gap-3">
-                <div
-                  className={`p-2 rounded-full ${
-                    user.role === ROLES.TEACHER
-                      ? "bg-purple-100 text-purple-600"
-                      : user.role === ROLES.ADMIN
-                      ? "bg-red-100 text-red-600"
-                      : user.role === ROLES.MANAGER
-                      ? "bg-blue-100 text-blue-600"
-                      : "bg-gray-100 text-gray-500"
-                  }`}
-                >
-                  {user.role === ROLES.TEACHER ? (
-                    <School size={16} />
-                  ) : user.role === ROLES.ADMIN ? (
-                    <ShieldAlert size={16} />
-                  ) : (
-                    <User size={16} />
-                  )}
-                </div>
-                {editingId === user.id && editMode === "name" ? (
-                  <input
-                    autoFocus
-                    className="border p-1 rounded text-sm"
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                  />
-                ) : (
-                  <div>
-                    <p className="font-medium text-gray-800 text-sm">
-                      {user.name}
-                    </p>
-                    <p className="text-[10px] text-gray-400 uppercase">
-                      {user.role}
-                    </p>
-                  </div>
-                )}
+                <div className={`p-2 rounded-full ${user.role === ROLES.TEACHER ? 'bg-purple-100 text-purple-600' : user.role === ROLES.ADMIN ? 'bg-red-100 text-red-600' : user.role === ROLES.MANAGER ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'}`}>{user.role === ROLES.TEACHER ? <School size={16}/> : user.role === ROLES.ADMIN ? <ShieldAlert size={16}/> : <User size={16}/>}</div>
+                {editingId === user.id && editMode === 'name' ? (<input autoFocus className="border p-1 rounded text-sm" value={editValue} onChange={e => setEditValue(e.target.value)}/>) : (<div><p className="font-medium text-gray-800 text-sm">{user.name}</p><p className="text-[10px] text-gray-400 uppercase">{user.role}</p></div>)}
               </div>
-
               <div className="flex items-center gap-2">
                 {editingId === user.id ? (
                   <>
-                    {editMode === "pin" && (
-                      <input
-                        className="w-16 p-1 border rounded text-center text-xs"
-                        placeholder="PIN"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        autoFocus
-                      />
-                    )}
-                    {editMode === "group" && (
-                      <select
-                        className="p-1 border rounded text-sm"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        autoFocus
-                      >
-                        {[1, 2, 3, 4].map((g) => (
-                          <option key={g} value={g}>
-                            Tổ {g}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                    <button
-                      onClick={() => handleSaveEdit(user.id)}
-                      className="p-1 text-green-600 bg-green-50 rounded"
-                    >
-                      <Save size={16} />
-                    </button>
-                    <button
-                      onClick={() => {
-                        setEditingId(null);
-                        setEditMode(null);
-                      }}
-                      className="p-1 text-red-600 bg-red-50 rounded"
-                    >
-                      <X size={16} />
-                    </button>
+                    {editMode === 'pin' && <input className="w-16 p-1 border rounded text-center text-xs" placeholder="PIN" value={editValue} onChange={e => setEditValue(e.target.value)} autoFocus/>}
+                    {editMode === 'group' && (<select className="p-1 border rounded text-sm" value={editValue} onChange={e => setEditValue(e.target.value)} autoFocus>{[1,2,3,4].map(g => <option key={g} value={g}>Tổ {g}</option>)}</select>)}
+                    <button onClick={() => handleSaveEdit(user.id)} className="p-1 text-green-600 bg-green-50 rounded"><Save size={16}/></button><button onClick={() => { setEditingId(null); setEditMode(null); }} className="p-1 text-red-600 bg-red-50 rounded"><X size={16}/></button>
                   </>
                 ) : (
                   <>
-                    {checkPermission("editName", user) && (
-                      <button
-                        onClick={() => {
-                          setEditingId(user.id);
-                          setEditMode("name");
-                          setEditValue(user.name);
-                        }}
-                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-                        title="Sửa tên"
-                      >
-                        <Edit3 size={16} />
-                      </button>
-                    )}
-
-                    {/* MOVE GROUP BUTTON */}
-                    {checkPermission("moveGroup", user) && (
-                      <button
-                        onClick={() => {
-                          setEditingId(user.id);
-                          setEditMode("group");
-                          setEditValue(user.group);
-                        }}
-                        className="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded"
-                        title="Chuyển Tổ"
-                      >
-                        <ArrowRightLeft size={16} />
-                      </button>
-                    )}
-
-                    {checkPermission("resetPin", user) && (
-                      <button
-                        onClick={() => {
-                          setEditingId(user.id);
-                          setEditMode("pin");
-                          setEditValue(user.pin);
-                        }}
-                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded"
-                        title="Đổi PIN"
-                      >
-                        <Key size={16} />
-                      </button>
-                    )}
-                    {checkPermission("delete", user) && (
-                      <button
-                        onClick={() => handleDeleteUser(user.id)}
-                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                        title="Xóa"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    )}
+                    {checkPermission('editName', user) && <button onClick={() => { setEditingId(user.id); setEditMode('name'); setEditValue(user.name); }} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded" title="Sửa tên"><Edit3 size={16}/></button>}
+                    {checkPermission('moveGroup', user) && (<button onClick={() => { setEditingId(user.id); setEditMode('group'); setEditValue(user.group); }} className="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded" title="Chuyển Tổ"><ArrowRightLeft size={16}/></button>)}
+                    {checkPermission('resetPin', user) && <button onClick={() => { setEditingId(user.id); setEditMode('pin'); setEditValue(user.pin); }} className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded" title="Đổi PIN"><Key size={16}/></button>}
+                    {checkPermission('delete', user) && <button onClick={() => handleDeleteUser(user.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded" title="Xóa"><Trash2 size={16}/></button>}
                   </>
                 )}
               </div>
             </div>
-          );
-        })}
+         ))}
       </div>
     </div>
   );
 };
 
-// 3. Dashboard
 const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
   const { users, weeklyData, rules, months, managerPermissions } = dbState;
   const [activeMonthId, setActiveMonthId] = useState(months[0]?.id || 1);
   const [activeWeek, setActiveWeek] = useState(1);
-  const [activeTab, setActiveTab] = useState(
-    currentUser.role === ROLES.STUDENT ? "overview" : "input"
-  );
+  const [activeTab, setActiveTab] = useState(currentUser.role === ROLES.STUDENT ? 'overview' : 'input');
   const [expandedGroup, setExpandedGroup] = useState(null);
-  const [newRule, setNewRule] = useState({
-    label: "",
-    fine: 0,
-    points: -2,
-    type: "penalty",
-  });
+  const [newRule, setNewRule] = useState({ label: '', fine: 0, points: -2, type: 'penalty' });
 
   const isTeacher = currentUser.role === ROLES.TEACHER;
   const isAdmin = currentUser.role === ROLES.ADMIN;
   const isStudent = currentUser.role === ROLES.STUDENT;
-  const canManageAccount = !isStudent;
-
+  const canManageAccount = !isStudent; 
   const canManageRules = isTeacher || isAdmin;
 
-  const activeMonthLabel =
-    months.find((m) => m.id === activeMonthId)?.name || "Tháng ?";
+  const activeMonthLabel = months.find(m => m.id === activeMonthId)?.name || "Tháng ?";
   const getKey = (monthId, weekId) => `m${monthId}_w${weekId}`;
-  const getStudentData = (userId, monthId, weekId) =>
-    weeklyData[getKey(monthId, weekId)]?.[userId] || {
-      score: 80,
-      fines: 0,
-      violations: [],
-    };
+  const getStudentData = (userId, monthId, weekId) => weeklyData[getKey(monthId, weekId)]?.[userId] || { score: 80, fines: 0, violations: [] };
 
-  const studentList = Object.values(users).filter(
-    (u) => u.role === ROLES.STUDENT || u.role === ROLES.MANAGER
-  );
-  const detailedStats = useMemo(
-    () =>
-      studentList
-        .map((student) => {
-          let cM = 0,
-            aT = 0;
-          for (let w = 1; w <= 4; w++)
-            cM += getStudentData(student.id, activeMonthId, w).score;
-          months.forEach((m) => {
-            for (let w = 1; w <= 4; w++)
-              aT += getStudentData(student.id, m.id, w).score;
-          });
-          return {
-            ...student,
-            currentMonthAvg: cM / 4,
-            allTimeAvg: months.length > 0 ? aT / (months.length * 4) : 80,
-          };
-        })
-        .sort((a, b) => b.allTimeAvg - a.allTimeAvg),
-    [users, weeklyData, activeMonthId, months]
-  );
+  const studentList = Object.values(users).filter(u => u.role === ROLES.STUDENT || u.role === ROLES.MANAGER);
+  const detailedStats = useMemo(() => studentList.map(student => {
+      let cM = 0, aT = 0;
+      for (let w = 1; w <= 4; w++) cM += getStudentData(student.id, activeMonthId, w).score;
+      months.forEach(m => { for (let w = 1; w <= 4; w++) aT += getStudentData(student.id, m.id, w).score; });
+      return { ...student, currentMonthAvg: cM / 4, allTimeAvg: months.length > 0 ? aT / (months.length * 4) : 80 };
+    }).sort((a, b) => b.allTimeAvg - a.allTimeAvg), [users, weeklyData, activeMonthId, months]);
 
   const handleAddViolation = (targetId, ruleId) => {
     if (isStudent) return;
-    const rule = rules.find((r) => r.id === ruleId);
+    const rule = rules.find(r => r.id === ruleId);
     if (!rule) return;
     const cD = getStudentData(targetId, activeMonthId, activeWeek);
-    const nE = {
-      id: Date.now(),
-      ruleId: rule.id,
-      ruleLabel: rule.label,
-      fineAtTime: rule.fine || 0,
-      pointsAtTime: rule.points,
-      timestamp: Date.now(),
-      by: currentUser.name,
-    };
-    const uD = {
-      ...cD,
-      score: cD.score + rule.points,
-      fines: cD.fines + (rule.fine || 0),
-      violations: [nE, ...cD.violations],
-    };
-    updateData({
-      weeklyData: {
-        ...weeklyData,
-        [getKey(activeMonthId, activeWeek)]: {
-          ...(weeklyData[getKey(activeMonthId, activeWeek)] || {}),
-          [targetId]: uD,
-        },
-      },
-    });
+    const nE = { id: Date.now(), ruleId: rule.id, ruleLabel: rule.label, fineAtTime: rule.fine||0, pointsAtTime: rule.points, timestamp: Date.now(), by: currentUser.name };
+    const uD = { ...cD, score: cD.score + rule.points, fines: cD.fines + (rule.fine||0), violations: [nE, ...cD.violations] };
+    updateData({ weeklyData: { ...weeklyData, [getKey(activeMonthId, activeWeek)]: { ...(weeklyData[getKey(activeMonthId, activeWeek)]||{}), [targetId]: uD } } });
   };
 
   const handleRemoveViolation = (targetId, entryId) => {
     if (isStudent) return;
     const cD = getStudentData(targetId, activeMonthId, activeWeek);
-    const entry = cD.violations.find((v) => v.id === entryId);
+    const entry = cD.violations.find(v => v.id === entryId);
     if (!entry) return;
-    const uD = {
-      ...cD,
-      score: cD.score - entry.pointsAtTime,
-      fines: Math.max(0, cD.fines - entry.fineAtTime),
-      violations: cD.violations.filter((v) => v.id !== entryId),
-    };
-    updateData({
-      weeklyData: {
-        ...weeklyData,
-        [getKey(activeMonthId, activeWeek)]: {
-          ...(weeklyData[getKey(activeMonthId, activeWeek)] || {}),
-          [targetId]: uD,
-        },
-      },
-    });
+    const uD = { ...cD, score: cD.score - entry.pointsAtTime, fines: Math.max(0, cD.fines - entry.fineAtTime), violations: cD.violations.filter(v => v.id !== entryId) };
+    updateData({ weeklyData: { ...weeklyData, [getKey(activeMonthId, activeWeek)]: { ...(weeklyData[getKey(activeMonthId, activeWeek)]||{}), [targetId]: uD } } });
   };
 
   const handleAddMonth = () => {
-    if (!isTeacher && !isAdmin) return;
-    const nextId =
-      months.length > 0 ? Math.max(...months.map((m) => m.id)) + 1 : 1;
-    updateData({
-      months: [...months, { id: nextId, name: `Tháng ${nextId}` }],
-    });
-    setActiveMonthId(nextId);
-    setActiveWeek(1);
+    if(!isTeacher && !isAdmin) return;
+    const nextId = months.length > 0 ? Math.max(...months.map(m => m.id)) + 1 : 1;
+    updateData({ months: [...months, { id: nextId, name: `Tháng ${nextId}` }] });
+    setActiveMonthId(nextId); setActiveWeek(1);
     alert("Đã thêm tháng mới!");
   };
 
   const handleAddRule = () => {
     if (!newRule.label) return;
-    updateData({
-      rules: [
-        ...rules,
-        {
-          ...newRule,
-          id: `r_${Date.now()}`,
-          fine: Number(newRule.fine),
-          points: Number(newRule.points),
-        },
-      ],
-    });
-    setNewRule({ label: "", fine: 0, points: -2, type: "penalty" });
+    updateData({ rules: [...rules, { ...newRule, id: `r_${Date.now()}`, fine: Number(newRule.fine), points: Number(newRule.points) }] });
+    setNewRule({ label: '', fine: 0, points: -2, type: 'penalty' });
   };
-  const handleDeleteRule = (id) => {
-    if (confirm("Xóa?"))
-      updateData({ rules: rules.filter((r) => r.id !== id) });
-  };
+  const handleDeleteRule = (id) => { if(confirm("Xóa?")) updateData({ rules: rules.filter(r => r.id !== id) }) };
 
-  const renderInputList = () =>
-    [1, 2, 3, 4].map((groupId) => {
-      const groupMembers = studentList.filter((s) => s.group === groupId);
-      const isExpanded = expandedGroup === groupId;
-      return (
-        <div
-          key={groupId}
-          className="bg-white rounded-xl shadow-sm mb-4 overflow-hidden border border-gray-100"
-        >
-          <div
-            onClick={() => setExpandedGroup(isExpanded ? null : groupId)}
-            className="p-4 flex justify-between items-center cursor-pointer bg-gray-50 hover:bg-gray-100"
-          >
-            <div className="flex items-center gap-3">
-              <div
-                className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white bg-indigo-500`}
-              >
-                T{groupId}
-              </div>
-              <div>
-                <h3 className="font-bold text-gray-800">Tổ {groupId}</h3>
-                <p className="text-xs text-gray-500">
-                  Sĩ số: {groupMembers.length}
-                </p>
-              </div>
-            </div>
-            {isExpanded ? (
-              <ChevronUp className="text-gray-400" />
-            ) : (
-              <ChevronDown className="text-gray-400" />
-            )}
-          </div>
-          {isExpanded && (
-            <div className="divide-y divide-gray-100">
-              {groupMembers.map((student) => {
-                const sData = getStudentData(
-                  student.id,
-                  activeMonthId,
-                  activeWeek
-                );
-                const rating = getRating(sData.score);
-                return (
-                  <div key={student.id} className="p-4 hover:bg-indigo-50">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="font-semibold text-gray-800">
-                        {student.name}
-                      </span>
-                      <span
-                        className={`text-xs px-2 py-1 rounded-full font-bold ${rating.color}`}
-                      >
-                        {sData.score}đ - {rating.label}
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-1 gap-2 mt-2">
-                      <div className="flex flex-wrap gap-2">
-                        {rules
-                          .filter((r) => r.type === "bonus")
-                          .map((r) => (
-                            <button
-                              key={r.id}
-                              onClick={() =>
-                                handleAddViolation(student.id, r.id)
-                              }
-                              className="text-[10px] px-2 py-1 bg-green-50 border border-green-200 text-green-700 rounded hover:bg-green-100"
-                            >
-                              +{r.points} {r.label}
-                            </button>
-                          ))}
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {rules
-                          .filter((r) => r.type === "penalty")
-                          .map((r) => (
-                            <button
-                              key={r.id}
-                              onClick={() =>
-                                handleAddViolation(student.id, r.id)
-                              }
-                              className="text-[10px] px-2 py-1 bg-red-50 border border-red-200 text-red-700 rounded hover:bg-red-100"
-                            >
-                              {r.points} {r.label}
-                            </button>
-                          ))}
-                      </div>
-                    </div>
-                    {sData.violations.length > 0 && (
-                      <div className="mt-2 pt-2 border-t border-dashed border-gray-200">
-                        {sData.violations.map((v) => (
-                          <div
-                            key={v.id}
-                            className="flex justify-between text-xs text-gray-500 mb-1"
-                          >
-                            <span>{v.ruleLabel}</span>
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={
-                                  v.pointsAtTime > 0
-                                    ? "text-green-600"
-                                    : "text-red-500"
-                                }
-                              >
-                                {v.pointsAtTime > 0
-                                  ? `+${v.pointsAtTime}`
-                                  : v.pointsAtTime}
-                              </span>
-                              <button
-                                onClick={() =>
-                                  handleRemoveViolation(student.id, v.id)
-                                }
-                                className="text-gray-400 hover:text-red-500"
-                              >
-                                <Trash2 size={10} />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+  const renderInputList = () => [1, 2, 3, 4].map(groupId => {
+    const groupMembers = studentList.filter(s => s.group === groupId);
+    const isExpanded = expandedGroup === groupId;
+    return (
+      <div key={groupId} className="bg-white rounded-xl shadow-sm mb-4 overflow-hidden border border-gray-100">
+        <div onClick={() => setExpandedGroup(isExpanded ? null : groupId)} className="p-4 flex justify-between items-center cursor-pointer bg-gray-50 hover:bg-gray-100">
+          <div className="flex items-center gap-3"><div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white bg-indigo-500`}>T{groupId}</div><div><h3 className="font-bold text-gray-800">Tổ {groupId}</h3><p className="text-xs text-gray-500">Sĩ số: {groupMembers.length}</p></div></div>
+          {isExpanded ? <ChevronUp className="text-gray-400"/> : <ChevronDown className="text-gray-400"/>}
         </div>
-      );
-    });
+        {isExpanded && (
+          <div className="divide-y divide-gray-100">
+            {groupMembers.map(student => {
+              const sData = getStudentData(student.id, activeMonthId, activeWeek);
+              const rating = getRating(sData.score);
+              return (
+                <div key={student.id} className="p-4 hover:bg-indigo-50">
+                  <div className="flex justify-between items-center mb-2"><span className="font-semibold text-gray-800">{student.name}</span><span className={`text-xs px-2 py-1 rounded-full font-bold ${rating.color}`}>{sData.score}đ - {rating.label}</span></div>
+                  <div className="grid grid-cols-1 gap-2 mt-2">
+                    <div className="flex flex-wrap gap-2">{rules.filter(r=>r.type==='bonus').map(r => (<button key={r.id} onClick={() => handleAddViolation(student.id, r.id)} className="text-[10px] px-2 py-1 bg-green-50 border border-green-200 text-green-700 rounded hover:bg-green-100">+{r.points} {r.label}</button>))}</div>
+                    <div className="flex flex-wrap gap-2">{rules.filter(r=>r.type==='penalty').map(r => (<button key={r.id} onClick={() => handleAddViolation(student.id, r.id)} className="text-[10px] px-2 py-1 bg-red-50 border border-red-200 text-red-700 rounded hover:bg-red-100">{r.points} {r.label}</button>))}</div>
+                  </div>
+                  {sData.violations.length > 0 && (<div className="mt-2 pt-2 border-t border-dashed border-gray-200">{sData.violations.map(v => (<div key={v.id} className="flex justify-between text-xs text-gray-500 mb-1"><span>{v.ruleLabel}</span><div className="flex items-center gap-2"><span className={v.pointsAtTime > 0 ? 'text-green-600' : 'text-red-500'}>{v.pointsAtTime > 0 ? `+${v.pointsAtTime}` : v.pointsAtTime}</span><button onClick={() => handleRemoveViolation(student.id, v.id)} className="text-gray-400 hover:text-red-500"><Trash2 size={10}/></button></div></div>))}</div>)}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  });
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       <header className="bg-white shadow-sm sticky top-0 z-20">
         <div className="max-w-3xl mx-auto px-4 py-2 flex justify-between items-center border-b border-gray-100">
           <div className="flex items-center gap-2">
-            <div className="bg-indigo-100 p-2 rounded-lg text-indigo-700">
-              <Calendar size={20} />
-            </div>
-            <select
-              value={activeMonthId}
-              onChange={(e) => {
-                setActiveMonthId(Number(e.target.value));
-                setActiveWeek(1);
-              }}
-              className="font-bold text-lg text-gray-800 bg-transparent outline-none cursor-pointer hover:text-indigo-600"
-            >
-              {months.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-            {(isTeacher || isAdmin) && (
-              <button onClick={handleAddMonth} className="text-indigo-500">
-                <PlusCircle size={20} />
-              </button>
-            )}
+             <div className="bg-indigo-100 p-2 rounded-lg text-indigo-700"><Calendar size={20} /></div>
+             <select value={activeMonthId} onChange={(e) => { setActiveMonthId(Number(e.target.value)); setActiveWeek(1); }} className="font-bold text-lg text-gray-800 bg-transparent outline-none cursor-pointer hover:text-indigo-600">{months.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select>
+             {(isTeacher || isAdmin) && <button onClick={handleAddMonth} className="text-indigo-500"><PlusCircle size={20}/></button>}
           </div>
           <div className="flex items-center gap-3">
-            <div className="text-right hidden sm:block">
-              <p className="text-sm font-bold text-gray-800">
-                {currentUser.name}
-              </p>
-              <p className="text-xs text-gray-500">
-                {currentUser.role === ROLES.TEACHER
-                  ? "Giáo viên"
-                  : currentUser.role === ROLES.ADMIN
-                  ? "Lớp trưởng"
-                  : currentUser.role === ROLES.MANAGER
-                  ? "Tổ trưởng"
-                  : "Học sinh"}
-              </p>
-            </div>
-            <button
-              onClick={onLogout}
-              className="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-red-50 hover:text-red-500"
-            >
-              <LogOut size={18} />
-            </button>
+             <div className="text-right hidden sm:block"><p className="text-sm font-bold text-gray-800">{currentUser.name}</p><p className="text-xs text-gray-500">{currentUser.role === ROLES.TEACHER ? 'Giáo viên' : currentUser.role === ROLES.ADMIN ? 'Lớp trưởng' : currentUser.role === ROLES.MANAGER ? 'Tổ trưởng' : 'Học sinh'}</p></div>
+             <button onClick={onLogout} className="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-red-50 hover:text-red-500"><LogOut size={18}/></button>
           </div>
         </div>
-        <div className="max-w-3xl mx-auto px-4 py-2 bg-gray-50/50 backdrop-blur-sm flex justify-between gap-2">
-          {[1, 2, 3, 4].map((w) => (
-            <button
-              key={w}
-              onClick={() => setActiveWeek(w)}
-              className={`flex-1 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
-                activeWeek === w
-                  ? "bg-indigo-600 text-white shadow-md"
-                  : "bg-white text-gray-500 border border-gray-200"
-              }`}
-            >
-              Tuần {w}
-            </button>
-          ))}
-        </div>
+        <div className="max-w-3xl mx-auto px-4 py-2 bg-gray-50/50 backdrop-blur-sm flex justify-between gap-2">{[1, 2, 3, 4].map(w => (<button key={w} onClick={() => setActiveWeek(w)} className={`flex-1 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${activeWeek === w ? 'bg-indigo-600 text-white shadow-md' : 'bg-white text-gray-500 border border-gray-200'}`}>Tuần {w}</button>))}</div>
       </header>
 
       <main className="max-w-3xl mx-auto p-4">
-        {activeTab === "overview" && (
-          <div className="fade-in bg-white rounded-xl shadow-sm overflow-hidden">
-            <div className="p-4 bg-indigo-50 border-b border-indigo-100">
-              <h2 className="font-bold text-indigo-900">
-                Bảng xếp hạng {activeMonthLabel}
-              </h2>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-gray-50 text-gray-500">
-                  <tr>
-                    <th className="p-3 w-10">#</th>
-                    <th className="p-3">Họ tên</th>
-                    <th className="p-3 text-right">TB Tháng</th>
-                    <th className="p-3 text-right">Tích lũy</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {detailedStats.map((s, i) => (
-                    <tr key={s.id} className="hover:bg-gray-50">
-                      <td className="p-3 text-center text-gray-400">{i + 1}</td>
-                      <td className="p-3 font-medium text-gray-800">
-                        {s.name}
-                        <div className="text-[10px] text-gray-400">
-                          Tổ {s.group}
-                        </div>
-                      </td>
-                      <td className="p-3 text-right font-bold text-gray-600">
-                        {s.currentMonthAvg.toFixed(1)}
-                      </td>
-                      <td className="p-3 text-right font-bold text-indigo-600">
-                        {s.allTimeAvg?.toFixed(1)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+        {activeTab === 'overview' && (
+           <div className="fade-in bg-white rounded-xl shadow-sm overflow-hidden">
+               <div className="p-4 bg-indigo-50 border-b border-indigo-100"><h2 className="font-bold text-indigo-900">Bảng xếp hạng {activeMonthLabel}</h2></div>
+               <div className="overflow-x-auto">
+                 <table className="w-full text-sm text-left"><thead className="bg-gray-50 text-gray-500"><tr><th className="p-3 w-10">#</th><th className="p-3">Họ tên</th><th className="p-3 text-right">TB Tháng</th><th className="p-3 text-right">Tích lũy</th></tr></thead><tbody className="divide-y divide-gray-100">{detailedStats.map((s, i) => (<tr key={s.id} className="hover:bg-gray-50"><td className="p-3 text-center text-gray-400">{i+1}</td><td className="p-3 font-medium text-gray-800">{s.name}<div className="text-[10px] text-gray-400">Tổ {s.group}</div></td><td className="p-3 text-right font-bold text-gray-600">{s.currentMonthAvg.toFixed(1)}</td><td className="p-3 text-right font-bold text-indigo-600">{s.allTimeAvg?.toFixed(1)}</td></tr>))}</tbody></table>
+               </div>
+           </div>
         )}
 
-        {activeTab === "input" && (
-          <div className="fade-in">{renderInputList()}</div>
+        {activeTab === 'input' && <div className="fade-in">{renderInputList()}</div>}
+        
+        {canManageAccount && activeTab === 'accounts' && (
+           <AccountManager users={users} updateData={updateData} currentUser={currentUser} managerPermissions={managerPermissions} />
         )}
-
-        {canManageAccount && activeTab === "accounts" && (
-          <AccountManager
-            users={users}
-            updateData={updateData}
-            currentUser={currentUser}
-            managerPermissions={managerPermissions}
-          />
-        )}
-
-        {!isStudent && activeTab === "rules" && (
-          <div className="bg-white rounded-xl shadow-sm p-4 fade-in">
-            <h2 className="font-bold text-gray-800 mb-4">Danh sách Nội quy</h2>
-            <div className="space-y-2 mb-4">
-              {rules.map((r) => (
-                <div
-                  key={r.id}
-                  className="flex justify-between items-center p-2 border rounded bg-gray-50"
-                >
-                  <div>
-                    <p className="text-sm font-medium">{r.label}</p>
-                    <p
-                      className={`text-xs font-bold ${
-                        r.points > 0 ? "text-green-600" : "text-red-500"
-                      }`}
-                    >
-                      {r.points > 0 ? "+" : ""}
-                      {r.points}đ
-                    </p>
-                  </div>
-                  {canManageRules && (
-                    <button
-                      onClick={() => handleDeleteRule(r.id)}
-                      className="text-gray-400 hover:text-red-500"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-            {canManageRules && (
-              <div className="pt-4 border-t border-gray-100 space-y-2">
-                <input
-                  placeholder="Tên quy định"
-                  className="w-full p-2 border rounded text-sm"
-                  value={newRule.label}
-                  onChange={(e) =>
-                    setNewRule({ ...newRule, label: e.target.value })
-                  }
-                />
-                <div className="flex gap-2">
-                  <input
-                    type="number"
-                    placeholder="Điểm (+/-)"
-                    className="w-1/2 p-2 border rounded text-sm"
-                    value={newRule.points}
-                    onChange={(e) =>
-                      setNewRule({ ...newRule, points: Number(e.target.value) })
-                    }
-                  />
-                  <button
-                    onClick={handleAddRule}
-                    className="w-1/2 bg-indigo-600 text-white rounded text-sm font-medium"
-                  >
-                    Thêm
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+        
+        {!isStudent && activeTab === 'rules' && (
+           <div className="bg-white rounded-xl shadow-sm p-4 fade-in">
+             <h2 className="font-bold text-gray-800 mb-4">Danh sách Nội quy</h2>
+             <div className="space-y-2 mb-4">{rules.map(r => (<div key={r.id} className="flex justify-between items-center p-2 border rounded bg-gray-50"><div><p className="text-sm font-medium">{r.label}</p><p className={`text-xs font-bold ${r.points > 0 ? 'text-green-600':'text-red-500'}`}>{r.points > 0 ? '+' : ''}{r.points}đ</p></div>{canManageRules && <button onClick={() => handleDeleteRule(r.id)} className="text-gray-400 hover:text-red-500"><Trash2 size={16}/></button>}</div>))}</div>
+             {canManageRules && (
+               <div className="pt-4 border-t border-gray-100 space-y-2">
+                 <input placeholder="Tên quy định" className="w-full p-2 border rounded text-sm" value={newRule.label} onChange={e => setNewRule({...newRule, label: e.target.value})}/>
+                 <div className="flex gap-2"><input type="number" placeholder="Điểm (+/-)" className="w-1/2 p-2 border rounded text-sm" value={newRule.points} onChange={e => setNewRule({...newRule, points: Number(e.target.value)})}/><button onClick={handleAddRule} className="w-1/2 bg-indigo-600 text-white rounded text-sm font-medium">Thêm</button></div>
+               </div>
+             )}
+           </div>
         )}
       </main>
 
       <nav className="fixed bottom-0 left-0 right-0 bg-white shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] border-t border-gray-100 py-2 px-4 z-20">
         <div className="flex justify-around">
-          <button
-            onClick={() => setActiveTab("overview")}
-            className={`flex flex-col items-center p-2 rounded-lg ${
-              activeTab === "overview"
-                ? "text-indigo-600 bg-indigo-50"
-                : "text-gray-400"
-            }`}
-          >
-            <ClipboardList size={20} />
-            <span className="text-[10px] mt-1">Tổng quan</span>
-          </button>
-          {!isStudent && (
-            <button
-              onClick={() => setActiveTab("input")}
-              className={`flex flex-col items-center p-2 rounded-lg ${
-                activeTab === "input"
-                  ? "text-indigo-600 bg-indigo-50"
-                  : "text-gray-400"
-              }`}
-            >
-              <UserCheck size={20} />
-              <span className="text-[10px] mt-1">Chấm điểm</span>
-            </button>
-          )}
-          {!isStudent && (
-            <button
-              onClick={() => setActiveTab("rules")}
-              className={`flex flex-col items-center p-2 rounded-lg ${
-                activeTab === "rules"
-                  ? "text-indigo-600 bg-indigo-50"
-                  : "text-gray-400"
-              }`}
-            >
-              <Gavel size={20} />
-              <span className="text-[10px] mt-1">Nội quy</span>
-            </button>
-          )}
-          {canManageAccount && (
-            <button
-              onClick={() => setActiveTab("accounts")}
-              className={`flex flex-col items-center p-2 rounded-lg ${
-                activeTab === "accounts"
-                  ? "text-indigo-600 bg-indigo-50"
-                  : "text-gray-400"
-              }`}
-            >
-              <Key size={20} />
-              <span className="text-[10px] mt-1">Tài khoản</span>
-            </button>
-          )}
+           <button onClick={() => setActiveTab('overview')} className={`flex flex-col items-center p-2 rounded-lg ${activeTab === 'overview' ? 'text-indigo-600 bg-indigo-50' : 'text-gray-400'}`}><ClipboardList size={20}/><span className="text-[10px] mt-1">Tổng quan</span></button>
+           {!isStudent && <button onClick={() => setActiveTab('input')} className={`flex flex-col items-center p-2 rounded-lg ${activeTab === 'input' ? 'text-indigo-600 bg-indigo-50' : 'text-gray-400'}`}><UserCheck size={20}/><span className="text-[10px] mt-1">Chấm điểm</span></button>}
+           {!isStudent && <button onClick={() => setActiveTab('rules')} className={`flex flex-col items-center p-2 rounded-lg ${activeTab === 'rules' ? 'text-indigo-600 bg-indigo-50' : 'text-gray-400'}`}><Gavel size={20}/><span className="text-[10px] mt-1">Nội quy</span></button>}
+           {canManageAccount && <button onClick={() => setActiveTab('accounts')} className={`flex flex-col items-center p-2 rounded-lg ${activeTab === 'accounts' ? 'text-indigo-600 bg-indigo-50' : 'text-gray-400'}`}><Key size={20}/><span className="text-[10px] mt-1">Tài khoản</span></button>}
         </div>
       </nav>
       <style>{`.fade-in { animation: fadeIn 0.3s ease-in-out; } .animate-slideDown { animation: slideDown 0.3s ease-out; } @keyframes slideDown { from { opacity: 0; transform: translateY(-10px); } to { opacity: 1; transform: translateY(0); } } @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }`}</style>
@@ -1241,29 +438,13 @@ export default function App() {
   const [dbState, setDbState] = useState(null);
 
   useEffect(() => {
-    const init = async () => {
-      if (typeof __initial_auth_token !== "undefined" && __initial_auth_token) {
-        await signInWithCustomToken(auth, __initial_auth_token);
-      } else {
-        await signInAnonymously(auth);
-      }
-    };
-    init();
-    return onAuthStateChanged(auth, setUser);
+    const init = async () => { if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) { await signInWithCustomToken(auth, __initial_auth_token); } else { await signInAnonymously(auth); } };
+    init(); return onAuthStateChanged(auth, setUser);
   }, []);
 
   useEffect(() => {
     if (!user) return;
-    // Use V11 Path
-    const docRef = doc(
-      db,
-      "artifacts",
-      appId,
-      "public",
-      "data",
-      "classData_v11",
-      "main"
-    );
+    const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'classData_v11', 'main');
     return onSnapshot(docRef, async (snap) => {
       if (snap.exists()) setDbState(snap.data());
       else await setDoc(docRef, seedData());
@@ -1272,101 +453,29 @@ export default function App() {
 
   const seedData = () => {
     const users = {};
-    users["teacher"] = {
-      id: "teacher",
-      name: "GV Chủ Nhiệm",
-      role: ROLES.TEACHER,
-      pin: "9999",
-    };
-    users["admin"] = {
-      id: "admin",
-      name: "Lớp Trưởng",
-      role: ROLES.ADMIN,
-      pin: "8888",
-      group: 1,
-    };
-    for (let i = 1; i <= 4; i++)
-      users[`mgr${i}`] = {
-        id: `mgr${i}`,
-        name: `Tổ trưởng ${i}`,
-        role: ROLES.MANAGER,
-        pin: "1234",
-        group: i,
-      };
-    const firstNames = [
-      "An",
-      "Bình",
-      "Chi",
-      "Dũng",
-      "Giang",
-      "Hương",
-      "Khánh",
-      "Linh",
-      "Minh",
-      "Nam",
-      "Oanh",
-      "Phúc",
-      "Quang",
-      "Sơn",
-      "Thảo",
-      "Uyên",
-      "Vinh",
-      "Yến",
-      "Tú",
-      "Hải",
-      "Đức",
-      "Long",
-      "Nhi",
-      "Trang",
-      "Hiếu",
-      "Việt",
-      "Hoàng",
-      "Dương",
-    ];
+    users['teacher'] = { id: 'teacher', name: 'GV Chủ Nhiệm', role: ROLES.TEACHER, pin: '9999' };
+    users['admin'] = { id: 'admin', name: 'Lớp Trưởng', role: ROLES.ADMIN, pin: '8888', group: 1 }; 
+    for (let i = 1; i <= 4; i++) users[`mgr${i}`] = { id: `mgr${i}`, name: `Tổ trưởng ${i}`, role: ROLES.MANAGER, pin: '1234', group: i };
+    const firstNames = ["An", "Bình", "Chi", "Dũng", "Giang", "Hương", "Khánh", "Linh", "Minh", "Nam", "Oanh", "Phúc", "Quang", "Sơn", "Thảo", "Uyên", "Vinh", "Yến", "Tú", "Hải", "Đức", "Long", "Nhi", "Trang", "Hiếu", "Việt", "Hoàng", "Dương"];
     let k = 0;
     for (let i = 1; i <= 4; i++) {
       for (let j = 1; j <= 7; j++) {
         const id = `s${i}_${j}`;
-        const name = `Nguyễn ${firstNames[k++] || "HS " + k}`;
-        users[id] = { id, name, role: ROLES.STUDENT, pin: "0000", group: i };
+        const name = `Nguyễn ${firstNames[k++] || 'HS ' + k}`;
+        users[id] = { id, name, role: ROLES.STUDENT, pin: '0000', group: i };
       }
     }
-    return {
-      users,
-      rules: DEFAULT_RULES,
-      months: [{ id: 1, name: "Tháng 1" }],
+    return { 
+      users, 
+      rules: DEFAULT_RULES, 
+      months: [{ id: 1, name: 'Tháng 1' }], 
       weeklyData: {},
-      managerPermissions: DEFAULT_MANAGER_PERMISSIONS,
+      managerPermissions: DEFAULT_MANAGER_PERMISSIONS 
     };
   };
 
-  const updateData = async (newData) => {
-    if (!user) return;
-    const docRef = doc(
-      db,
-      "artifacts",
-      appId,
-      "public",
-      "data",
-      "classData_v11",
-      "main"
-    );
-    await updateDoc(docRef, newData);
-  };
-  if (!dbState)
-    return (
-      <div className="min-h-screen flex items-center justify-center text-indigo-600 font-bold">
-        Đang tải dữ liệu...
-      </div>
-    );
-  if (!currentUser)
-    return <LoginScreen dbState={dbState} onLogin={setCurrentUser} />;
-  return (
-    <Dashboard
-      currentUser={currentUser}
-      onLogout={() => setCurrentUser(null)}
-      dbState={dbState}
-      updateData={updateData}
-    />
-  );
+  const updateData = async (newData) => { if (!user) return; const docRef = doc(db, 'artifacts', appId, 'public', 'data', 'classData_v11', 'main'); await updateDoc(docRef, newData); };
+  if (!dbState) return <div className="min-h-screen flex items-center justify-center text-indigo-600 font-bold">Đang tải dữ liệu...</div>;
+  if (!currentUser) return <LoginScreen dbState={dbState} onLogin={setCurrentUser} />;
+  return <Dashboard currentUser={currentUser} onLogout={() => setCurrentUser(null)} dbState={dbState} updateData={updateData} />;
 }
