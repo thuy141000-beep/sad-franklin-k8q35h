@@ -84,9 +84,9 @@ const DEFAULT_MANAGER_PERMISSIONS = {
 
 // Quyền mặc định (sẽ được Giáo viên chỉnh sửa)
 const DEFAULT_PERMISSIONS = {
-  canManageUsers: false, // Quản lý thành viên
-  canManageRules: false, // Sửa nội quy
-  canResetPin: false, // Đổi PIN người khác
+  canManageUsers: false,
+  canManageRules: false,
+  canResetPin: false,
 };
 
 const FIXED_MONTHS = Array.from({ length: 12 }, (_, i) => ({
@@ -467,10 +467,8 @@ const LoginScreen = ({ dbState, onLogin }) => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-600 to-indigo-500 p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">
-            Thống kê tình hình lớp 12/4
-          </h1>
-          <p className="text-gray-500 text-sm">By Nguyễn Hoàng Brush</p>
+          <h1 className="text-2xl font-bold text-gray-800">Lớp Học Vui Vẻ</h1>
+          <p className="text-gray-500 text-sm">Năm học mới & Danh sách mới</p>
         </div>
         {!selectedUser ? (
           <>
@@ -581,7 +579,7 @@ const LoginScreen = ({ dbState, onLogin }) => {
   );
 };
 
-// 3. Account Manager (TEACHER CAN DELEGATE PERMISSIONS HERE)
+// 3. Account Manager
 const AccountManager = ({
   users,
   updateData,
@@ -935,7 +933,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
   const isStudent = currentUser.role === ROLES.STUDENT;
   const canManageAccount = !isStudent;
 
-  // Kiểm tra quyền sửa nội quy
   const canManageRules =
     isTeacher || (isAdmin && adminPermissions.canManageRules);
 
@@ -1026,7 +1023,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       })
       .sort((a, b) => b.rangeAvg - a.rangeAvg);
 
-    // *** PRIVACY FILTER: Student only sees themselves ***
+    // *** PRIVACY: Student only sees themselves ***
     if (isStudent) {
       return results.filter((s) => s.id === currentUser.id);
     }
@@ -1414,7 +1411,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                 <tbody className="divide-y divide-gray-100">
                   {overviewStats
                     .filter((s) => {
-                      // *** PRIVACY FILTER FOR OVERVIEW ***
+                      // *** BẢO MẬT: HỌC SINH CHỈ THẤY MÌNH ***
                       if (isStudent) return s.id === currentUser.id;
                       if (isManager) return s.group === currentUser.group;
                       return true;
@@ -1544,8 +1541,8 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
           <div className="fade-in">{renderInputList()}</div>
         )}
 
-        {/* TAB: QUẢN LÝ NỘI QUY */}
-        {!isStudent && activeTab === "rules" && (
+        {/* TAB: QUẢN LÝ NỘI QUY - TẤT CẢ ĐỀU XEM ĐƯỢC */}
+        {activeTab === "rules" && (
           <div className="bg-white rounded-xl shadow-sm p-4 fade-in">
             <div className="flex justify-between items-center mb-4">
               <h2 className="font-bold text-gray-800">Danh sách Nội quy</h2>
@@ -1716,19 +1713,17 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
               <span className="text-[10px] mt-1">Chấm điểm</span>
             </button>
           )}
-          {!isStudent && (
-            <button
-              onClick={() => setActiveTab("rules")}
-              className={`flex flex-col items-center p-2 rounded-lg ${
-                activeTab === "rules"
-                  ? "text-indigo-600 bg-indigo-50"
-                  : "text-gray-400"
-              }`}
-            >
-              <Gavel size={20} />
-              <span className="text-[10px] mt-1">Nội quy</span>
-            </button>
-          )}
+          <button
+            onClick={() => setActiveTab("rules")}
+            className={`flex flex-col items-center p-2 rounded-lg ${
+              activeTab === "rules"
+                ? "text-indigo-600 bg-indigo-50"
+                : "text-gray-400"
+            }`}
+          >
+            <Gavel size={20} />
+            <span className="text-[10px] mt-1">Nội quy</span>
+          </button>
           {canManageAccount && (
             <button
               onClick={() => setActiveTab("accounts")}
