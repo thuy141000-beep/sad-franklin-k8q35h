@@ -466,7 +466,7 @@ const LoginScreen = ({ dbState, onLogin }) => {
       <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">
-            Thống kê tình lớp 12/4
+            Thống kê tình hình lớp 12/4
           </h1>
           <p className="text-gray-500 text-sm">by Củ Cãi muối</p>
         </div>
