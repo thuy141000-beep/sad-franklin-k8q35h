@@ -42,6 +42,7 @@ import {
   Lock,
   BarChart2,
   UserCog,
+  Eye, // Icon con mắt cho chế độ xem
 } from "lucide-react";
 
 // --- FIREBASE SETUP ---
@@ -82,7 +83,7 @@ const DEFAULT_MANAGER_PERMISSIONS = {
   allowMoveGroup: false,
 };
 
-// Quyền mặc định (sẽ được Giáo viên chỉnh sửa)
+// Quyền mặc định
 const DEFAULT_PERMISSIONS = {
   canManageUsers: false,
   canManageRules: false,
@@ -579,7 +580,7 @@ const LoginScreen = ({ dbState, onLogin }) => {
   );
 };
 
-// 3. Account Manager
+// 3. Account Manager (TEACHER CAN DELEGATE PERMISSIONS HERE)
 const AccountManager = ({
   users,
   updateData,
@@ -1160,8 +1161,17 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
 
   const renderInputList = () =>
     [1, 2, 3, 4].map((groupId) => {
-      const groupMembers = studentList.filter((s) => s.group === groupId);
+      let groupMembers = studentList.filter((s) => s.group === groupId);
+
+      // MANAGER FILTER
       if (isManager && currentUser.group !== groupId) return null;
+
+      // STUDENT PRIVACY: ONLY SHOW SELF
+      if (isStudent) {
+        if (currentUser.group !== groupId) return null; // Nếu không phải tổ của mình thì ẩn luôn
+        groupMembers = groupMembers.filter((s) => s.id === currentUser.id); // Trong tổ mình chỉ hiện mình
+      }
+
       const isExpanded = expandedGroup === groupId;
       return (
         <div
@@ -1211,38 +1221,43 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                         {sData.score}đ - {rating.label}
                       </span>
                     </div>
-                    <div className="grid grid-cols-1 gap-2 mt-2">
-                      <div className="flex flex-wrap gap-2">
-                        {rules
-                          .filter((r) => r.type === "bonus")
-                          .map((r) => (
-                            <button
-                              key={r.id}
-                              onClick={() =>
-                                handleAddViolation(student.id, r.id)
-                              }
-                              className="text-[10px] px-2 py-1 bg-green-50 border border-green-200 text-green-700 rounded hover:bg-green-100"
-                            >
-                              +{r.points} {r.label}
-                            </button>
-                          ))}
+
+                    {/* NÚT CHẤM ĐIỂM: CHỈ HIỆN NẾU KHÔNG PHẢI LÀ HỌC SINH */}
+                    {!isStudent && (
+                      <div className="grid grid-cols-1 gap-2 mt-2">
+                        <div className="flex flex-wrap gap-2">
+                          {rules
+                            .filter((r) => r.type === "bonus")
+                            .map((r) => (
+                              <button
+                                key={r.id}
+                                onClick={() =>
+                                  handleAddViolation(student.id, r.id)
+                                }
+                                className="text-[10px] px-2 py-1 bg-green-50 border border-green-200 text-green-700 rounded hover:bg-green-100"
+                              >
+                                +{r.points} {r.label}
+                              </button>
+                            ))}
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {rules
+                            .filter((r) => r.type === "penalty")
+                            .map((r) => (
+                              <button
+                                key={r.id}
+                                onClick={() =>
+                                  handleAddViolation(student.id, r.id)
+                                }
+                                className="text-[10px] px-2 py-1 bg-red-50 border border-red-200 text-red-700 rounded hover:bg-red-100"
+                              >
+                                {r.points} {r.label}
+                              </button>
+                            ))}
+                        </div>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        {rules
-                          .filter((r) => r.type === "penalty")
-                          .map((r) => (
-                            <button
-                              key={r.id}
-                              onClick={() =>
-                                handleAddViolation(student.id, r.id)
-                              }
-                              className="text-[10px] px-2 py-1 bg-red-50 border border-red-200 text-red-700 rounded hover:bg-red-100"
-                            >
-                              {r.points} {r.label}
-                            </button>
-                          ))}
-                      </div>
-                    </div>
+                    )}
+
                     {sData.violations.length > 0 && (
                       <div className="mt-2 pt-2 border-t border-dashed border-gray-200">
                         {sData.violations.map((v) => (
@@ -1263,14 +1278,17 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                                   ? `+${v.pointsAtTime}`
                                   : v.pointsAtTime}
                               </span>
-                              <button
-                                onClick={() =>
-                                  handleRemoveViolation(student.id, v.id)
-                                }
-                                className="text-gray-400 hover:text-red-500"
-                              >
-                                <Trash2 size={10} />
-                              </button>
+                              {/* NÚT XÓA: CHỈ HIỆN NẾU KHÔNG PHẢI HỌC SINH */}
+                              {!isStudent && (
+                                <button
+                                  onClick={() =>
+                                    handleRemoveViolation(student.id, v.id)
+                                  }
+                                  className="text-gray-400 hover:text-red-500"
+                                >
+                                  <Trash2 size={10} />
+                                </button>
+                              )}
                             </div>
                           </div>
                         ))}
@@ -1536,7 +1554,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
           </div>
         )}
 
-        {/* TAB: CHẤM ĐIỂM */}
+        {/* TAB: CHẤM ĐIỂM (ĐỐI VỚI HỌC SINH: XEM CHI TIẾT) */}
         {activeTab === "input" && (
           <div className="fade-in">{renderInputList()}</div>
         )}
@@ -1700,19 +1718,20 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
             <BarChart2 size={20} />
             <span className="text-[10px] mt-1">Thống kê</span>
           </button>
-          {!isStudent && (
-            <button
-              onClick={() => setActiveTab("input")}
-              className={`flex flex-col items-center p-2 rounded-lg ${
-                activeTab === "input"
-                  ? "text-indigo-600 bg-indigo-50"
-                  : "text-gray-400"
-              }`}
-            >
-              <UserCheck size={20} />
-              <span className="text-[10px] mt-1">Chấm điểm</span>
-            </button>
-          )}
+          {/* NÚT CHẤM ĐIỂM / CHI TIẾT TUẦN */}
+          <button
+            onClick={() => setActiveTab("input")}
+            className={`flex flex-col items-center p-2 rounded-lg ${
+              activeTab === "input"
+                ? "text-indigo-600 bg-indigo-50"
+                : "text-gray-400"
+            }`}
+          >
+            {isStudent ? <Eye size={20} /> : <UserCheck size={20} />}
+            <span className="text-[10px] mt-1">
+              {isStudent ? "Chi tiết" : "Chấm điểm"}
+            </span>
+          </button>
           <button
             onClick={() => setActiveTab("rules")}
             className={`flex flex-col items-center p-2 rounded-lg ${
