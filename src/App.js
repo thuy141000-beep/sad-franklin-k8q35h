@@ -38,12 +38,13 @@ import {
   ToggleRight,
   Users,
   ArrowRightLeft,
-  DollarSign,
+  RefreshCw,
   Lock,
-  Briefcase,
   BarChart2,
-  Hash,
+  UserCog,
 } from "lucide-react";
+
+// --- FIREBASE SETUP ---
 const firebaseConfig = {
   apiKey: "AIzaSyCRKW6fQwJqj2bSfuAXc5Nr259KVmzhic8",
   authDomain: "lop-hoc-vui-ve2.firebaseapp.com",
@@ -53,18 +54,24 @@ const firebaseConfig = {
   appId: "1:454777169300:web:ebe2542d74b779eb8b1b81",
 };
 
-// Khởi tạo Firebase an toàn
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
-// Thay đổi ID lớp học của bạn ở đây nếu cần
 const appId = "lop12-4-2025";
+
 // --- CONSTANTS ---
 const ROLES = {
   TEACHER: "teacher",
   ADMIN: "admin",
   MANAGER: "manager",
   STUDENT: "student",
+};
+
+const ROLE_LABELS = {
+  [ROLES.TEACHER]: "Giáo viên",
+  [ROLES.ADMIN]: "Lớp trưởng",
+  [ROLES.MANAGER]: "Tổ trưởng",
+  [ROLES.STUDENT]: "Học sinh",
 };
 
 const DEFAULT_MANAGER_PERMISSIONS = {
@@ -75,38 +82,124 @@ const DEFAULT_MANAGER_PERMISSIONS = {
   allowMoveGroup: false,
 };
 
+// Quyền mặc định (sẽ được Giáo viên chỉnh sửa)
+const DEFAULT_PERMISSIONS = {
+  canManageUsers: false, // Quản lý thành viên
+  canManageRules: false, // Sửa nội quy
+  canResetPin: false, // Đổi PIN người khác
+};
+
+const FIXED_MONTHS = Array.from({ length: 12 }, (_, i) => ({
+  id: i + 1,
+  name: `Tháng ${i + 1}`,
+}));
+
+const REAL_STUDENTS = [
+  "Văn Nguyễn Thành An",
+  "Lê Thoại Cát Anh",
+  "Nguyễn Phương Anh",
+  "Phan Nữ Huyền Anh",
+  "Hoàng Nguyên Chi",
+  "Nguyễn Trung Dũng",
+  "Nguyễn Đức Thành Đạt",
+  "Nguyễn Quốc Thái Hoàng",
+  "Đinh Như Khánh Hưng",
+  "Nguyễn Ngọc Quốc Hưng",
+  "Trần Duy Hưng",
+  "Huỳnh Thế Khang",
+  "Nguyễn Trần Khánh Linh",
+  "Hồ Thùy Miên",
+  "Lê Thị Trà My",
+  "Lê Thanh Nhàn",
+  "Dương Gia Phát",
+  "Nguyễn Hữu Quang",
+  "Lê Nguyễn Anh Quân",
+  "Tôn Nữ Phúc Quỳnh",
+  "Nguyễn Thị Anh Thi",
+  "Võ Quang Anh Thi",
+  "Đỗ Khắc Bảo Trâm",
+  "Hoàng Phương Bảo Trân",
+  "Nguyễn Hoàng Ý Vân",
+  "Trần Nguyễn Thùy Vân",
+];
+
 const DEFAULT_RULES = [
-  { id: "r1", label: "Đi học muộn", fine: 5000, points: -2, type: "penalty" },
+  {
+    id: "r1",
+    label: "Nói chuyện riêng",
+    fine: 20000,
+    points: -10,
+    type: "penalty",
+  },
   {
     id: "r2",
-    label: "Không làm bài tập",
-    fine: 10000,
-    points: -5,
+    label: "Không học bài, làm bài",
+    fine: 20000,
+    points: -10,
     type: "penalty",
   },
   {
     id: "r3",
-    label: "Nói chuyện riêng",
-    fine: 2000,
-    points: -2,
+    label: "Sai trang phục",
+    fine: 20000,
+    points: -10,
+    type: "penalty",
+  },
+  { id: "r4", label: "Ăn quà vặt", fine: 20000, points: -10, type: "penalty" },
+  {
+    id: "r5",
+    label: "Vắng không phép/Bỏ tiết",
+    fine: 20000,
+    points: -20,
+    type: "penalty",
+  },
+  { id: "r6", label: "Đi học muộn", fine: 20000, points: -10, type: "penalty" },
+  { id: "r7", label: "Vệ sinh bẩn", fine: 20000, points: -10, type: "penalty" },
+  {
+    id: "r8",
+    label: "Nộp phạt muộn",
+    fine: 10000,
+    points: -10,
     type: "penalty",
   },
   {
-    id: "b1",
+    id: "r9",
+    label: "Lớp phó thiếu trách nhiệm",
+    fine: 20000,
+    points: -20,
+    type: "penalty",
+  },
+  {
+    id: "r10",
+    label: "Lộn xộn đầu giờ",
+    fine: 20000,
+    points: -5,
+    type: "penalty",
+  },
+  {
+    id: "r11",
+    label: "Dùng điện thoại",
+    fine: 20000,
+    points: -30,
+    type: "penalty",
+  },
+  { id: "b1", label: "Điểm 8 trở lên", fine: 0, points: 10, type: "bonus" },
+  {
+    id: "b2",
     label: "Phát biểu xây dựng bài",
     fine: 0,
-    points: 2,
+    points: 1,
     type: "bonus",
   },
-  { id: "b2", label: "Đạt điểm 9, 10", fine: 0, points: 5, type: "bonus" },
 ];
 
 const getRating = (score) => {
-  if (score > 80) return { label: "Tốt", color: "bg-green-100 text-green-700" };
-  if (score >= 66) return { label: "Khá", color: "bg-blue-100 text-blue-700" };
+  if (score >= 80)
+    return { label: "Tốt", color: "bg-green-100 text-green-700" };
+  if (score >= 65) return { label: "Khá", color: "bg-blue-100 text-blue-700" };
   if (score >= 50)
     return { label: "TB", color: "bg-yellow-100 text-yellow-700" };
-  if (score >= 0)
+  if (score >= 35)
     return { label: "Yếu", color: "bg-orange-100 text-orange-700" };
   return { label: "Kém", color: "bg-red-100 text-red-700" };
 };
@@ -118,6 +211,7 @@ const formatMoney = (amount) =>
 
 // --- COMPONENTS ---
 
+// 1. Change Password Modal
 const ChangePasswordModal = ({ user, onClose, onSave }) => {
   const [oldPin, setOldPin] = useState("");
   const [newPin, setNewPin] = useState("");
@@ -139,39 +233,27 @@ const ChangePasswordModal = ({ user, onClose, onSave }) => {
           <Lock size={20} className="text-indigo-600" /> Đổi mật khẩu
         </h3>
         <div className="space-y-3">
-          <div>
-            <label className="text-xs font-medium text-gray-500">
-              Mã PIN hiện tại
-            </label>
-            <input
-              type="password"
-              className="w-full p-2 border rounded"
-              value={oldPin}
-              onChange={(e) => setOldPin(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-gray-500">
-              Mã PIN mới
-            </label>
-            <input
-              type="password"
-              className="w-full p-2 border rounded"
-              value={newPin}
-              onChange={(e) => setNewPin(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-gray-500">
-              Nhập lại PIN mới
-            </label>
-            <input
-              type="password"
-              className="w-full p-2 border rounded"
-              value={confirmPin}
-              onChange={(e) => setConfirmPin(e.target.value)}
-            />
-          </div>
+          <input
+            type="password"
+            placeholder="PIN hiện tại"
+            className="w-full p-2 border rounded"
+            value={oldPin}
+            onChange={(e) => setOldPin(e.target.value)}
+          />
+          <input
+            type="password"
+            placeholder="PIN mới"
+            className="w-full p-2 border rounded"
+            value={newPin}
+            onChange={(e) => setNewPin(e.target.value)}
+          />
+          <input
+            type="password"
+            placeholder="Nhập lại PIN mới"
+            className="w-full p-2 border rounded"
+            value={confirmPin}
+            onChange={(e) => setConfirmPin(e.target.value)}
+          />
           {error && <p className="text-red-500 text-xs">{error}</p>}
           <div className="flex gap-2 mt-4">
             <button
@@ -193,6 +275,114 @@ const ChangePasswordModal = ({ user, onClose, onSave }) => {
   );
 };
 
+// 2. User Edit Modal
+const UserEditModal = ({ targetUser, currentUser, onSave, onClose }) => {
+  const [formData, setFormData] = useState({
+    name: targetUser.name,
+    stt: targetUser.stt || "",
+    group: targetUser.group,
+    role: targetUser.role,
+  });
+
+  const isTeacher = currentUser.role === ROLES.TEACHER;
+  const canEditRole =
+    isTeacher ||
+    (currentUser.role === ROLES.ADMIN && targetUser.role !== ROLES.TEACHER);
+
+  const availableRoles = [
+    ROLES.STUDENT,
+    ROLES.MANAGER,
+    ROLES.ADMIN,
+    ...(isTeacher ? [ROLES.TEACHER] : []),
+  ];
+
+  const handleChange = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm animate-slideDown">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-bold text-gray-800">Sửa thông tin</h3>
+          <button onClick={onClose}>
+            <X size={20} className="text-gray-400" />
+          </button>
+        </div>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-gray-500">
+              Họ và tên
+            </label>
+            <input
+              className="w-full p-2 border rounded text-sm"
+              value={formData.name}
+              onChange={(e) => handleChange("name", e.target.value)}
+            />
+          </div>
+          <div className="flex gap-2">
+            <div className="w-1/3">
+              <label className="text-xs font-medium text-gray-500">STT</label>
+              <input
+                type="number"
+                className="w-full p-2 border rounded text-sm"
+                value={formData.stt}
+                onChange={(e) => handleChange("stt", e.target.value)}
+              />
+            </div>
+            <div className="w-2/3">
+              <label className="text-xs font-medium text-gray-500">Tổ</label>
+              <select
+                className="w-full p-2 border rounded text-sm"
+                value={formData.group}
+                onChange={(e) => handleChange("group", Number(e.target.value))}
+              >
+                {[1, 2, 3, 4].map((g) => (
+                  <option key={g} value={g}>
+                    Tổ {g}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          {canEditRole && (
+            <div>
+              <label className="text-xs font-medium text-gray-500">
+                Chức vụ
+              </label>
+              <select
+                className="w-full p-2 border rounded text-sm font-bold text-indigo-700"
+                value={formData.role}
+                onChange={(e) => handleChange("role", e.target.value)}
+              >
+                {availableRoles.map((r) => (
+                  <option key={r} value={r}>
+                    {ROLE_LABELS[r]}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+        <div className="flex gap-2 mt-6">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2 bg-gray-100 text-gray-600 rounded font-medium"
+          >
+            Hủy
+          </button>
+          <button
+            onClick={() => onSave(formData)}
+            className="flex-1 py-2 bg-indigo-600 text-white rounded font-medium"
+          >
+            Lưu
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const LoginScreen = ({ dbState, onLogin }) => {
   const [activeTab, setActiveTab] = useState("student");
   const [selectedUser, setSelectedUser] = useState(null);
@@ -203,10 +393,7 @@ const LoginScreen = ({ dbState, onLogin }) => {
   const getSortedList = (roleFilter) => {
     return Object.values(dbState.users)
       .filter((u) => u.role === roleFilter)
-      .sort((a, b) => {
-        if (a.group !== b.group) return (a.group || 0) - (b.group || 0);
-        return (a.stt || 999) - (b.stt || 999); // Sort by STT
-      });
+      .sort((a, b) => (a.stt || 999) - (b.stt || 999));
   };
 
   const admins = Object.values(dbState.users).filter(
@@ -267,7 +454,7 @@ const LoginScreen = ({ dbState, onLogin }) => {
               </span>
               {user.stt && (
                 <span className="text-[10px] text-gray-400 bg-gray-100 px-1 rounded">
-                  #{user.stt}
+                  STT: {user.stt}
                 </span>
               )}
             </div>
@@ -280,12 +467,8 @@ const LoginScreen = ({ dbState, onLogin }) => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-600 to-indigo-500 p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">
-            Thống kê lớp 12/4
-          </h1>
-          <p className="text-gray-500 text-sm">
-            Thực hiện bởi Nguyễn Hoàng Brush
-          </p>
+          <h1 className="text-2xl font-bold text-gray-800">Lớp Học Vui Vẻ</h1>
+          <p className="text-gray-500 text-sm">Năm học mới & Danh sách mới</p>
         </div>
         {!selectedUser ? (
           <>
@@ -396,81 +579,37 @@ const LoginScreen = ({ dbState, onLogin }) => {
   );
 };
 
+// 3. Account Manager (TEACHER CAN DELEGATE PERMISSIONS HERE)
 const AccountManager = ({
   users,
   updateData,
   currentUser,
-  managerPermissions,
+  adminPermissions,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
-  const [editingId, setEditingId] = useState(null);
-  const [editMode, setEditMode] = useState(null); // 'pin', 'name', 'group', 'role', 'stt'
-  const [editValue, setEditValue] = useState("");
-  const [targetGroup, setTargetGroup] = useState(1);
+  const [editingUser, setEditingUser] = useState(null);
   const [isAdding, setIsAdding] = useState(false);
   const [newUser, setNewUser] = useState({
     name: "",
-    group: currentUser.role === ROLES.MANAGER ? currentUser.group : 1,
     stt: "",
+    group: 1,
+    role: ROLES.STUDENT,
   });
 
   const isTeacher = currentUser.role === ROLES.TEACHER;
   const isAdmin = currentUser.role === ROLES.ADMIN;
   const isManager = currentUser.role === ROLES.MANAGER;
-  const canViewConfig = isTeacher || isAdmin;
 
-  const canAddUser =
-    isTeacher || isAdmin || (isManager && managerPermissions.allowAdd);
+  // Quyền hạn thực tế dựa trên cài đặt
+  const canManageUsers =
+    isTeacher || (isAdmin && adminPermissions.canManageUsers);
 
-  const checkPermission = (action, targetUser) => {
-    if (isTeacher || isAdmin) return true;
-    if (isManager) {
-      if (
-        targetUser.role !== ROLES.STUDENT ||
-        targetUser.group !== currentUser.group
-      )
-        return false;
-      if (action === "delete") return managerPermissions.allowDelete;
-      if (action === "editName") return managerPermissions.allowEditName;
-      if (action === "resetPin") return managerPermissions.allowResetPin;
-      if (action === "moveGroup") return managerPermissions.allowMoveGroup;
-    }
-    return false;
-  };
-
-  const handleSaveEdit = (userId) => {
-    let updatedUser = { ...users[userId] };
-
-    if (editMode === "pin") {
-      if (editValue.length < 4) return alert("PIN cần 4 ký tự");
-      updatedUser.pin = editValue;
-      alert("Đổi PIN thành công");
-    } else if (editMode === "name") {
-      updatedUser.name = editValue;
-    } else if (editMode === "stt") {
-      updatedUser.stt = Number(editValue);
-    } else if (editMode === "group") {
-      updatedUser.group = Number(editValue);
-      alert(`Đã chuyển sang Tổ ${editValue}`);
-    } else if (editMode === "role") {
-      updatedUser.role = editValue;
-      if (editValue === ROLES.MANAGER) {
-        updatedUser.group = Number(targetGroup);
-        updatedUser.pin = "1234";
-        alert(
-          `Đã bổ nhiệm ${updatedUser.name} làm Tổ trưởng Tổ ${targetGroup}`
-        );
-      } else {
-        if (editValue === ROLES.ADMIN) updatedUser.pin = "8888";
-        if (editValue === ROLES.STUDENT) updatedUser.pin = "0000";
-        alert(`Đã chuyển chức vụ thành ${editValue}`);
-      }
-    }
-
-    updateData({ users: { ...users, [userId]: updatedUser } });
-    setEditingId(null);
-    setEditMode(null);
-    setEditValue("");
+  const handleSaveUser = (updatedData) => {
+    const userId = editingUser.id;
+    let userToUpdate = { ...users[userId], ...updatedData };
+    updateData({ users: { ...users, [userId]: userToUpdate } });
+    setEditingUser(null);
+    alert("Cập nhật thông tin thành công!");
   };
 
   const handleDeleteUser = (userId) => {
@@ -481,27 +620,37 @@ const AccountManager = ({
     }
   };
 
+  const handleResetPin = (user) => {
+    const newPin = prompt("Nhập mã PIN mới (4 số):", "0000");
+    if (newPin && newPin.length >= 4) {
+      const updatedUsers = { ...users, [user.id]: { ...user, pin: newPin } };
+      updateData({ users: updatedUsers });
+      alert("Đã đổi PIN thành công!");
+    }
+  };
+
   const handleAddUser = () => {
     if (!newUser.name) return alert("Nhập tên");
     const id = `s_${Date.now()}`;
     const newStudent = {
       id,
       name: newUser.name,
+      stt: Number(newUser.stt) || 99,
       group: Number(newUser.group),
-      stt: Number(newUser.stt) || 99, // Default STT if empty
-      role: ROLES.STUDENT,
+      role: newUser.role,
       pin: "0000",
     };
     updateData({ users: { ...users, [id]: newStudent } });
     setIsAdding(false);
-    setNewUser({ name: "", group: isManager ? currentUser.group : 1, stt: "" });
-    alert("Đã thêm!");
+    setNewUser({ name: "", stt: "", group: 1, role: ROLES.STUDENT });
+    alert("Đã thêm thành viên mới!");
   };
 
-  const togglePermission = (key) => {
-    if (!canViewConfig) return;
-    const newPerms = { ...managerPermissions, [key]: !managerPermissions[key] };
-    updateData({ managerPermissions: newPerms });
+  // Teacher toggles Admin Permissions
+  const toggleAdminPermission = (key) => {
+    if (!isTeacher) return;
+    const newPerms = { ...adminPermissions, [key]: !adminPermissions[key] };
+    updateData({ adminPermissions: newPerms });
   };
 
   const displayedUsers = Object.values(users)
@@ -513,57 +662,83 @@ const AccountManager = ({
       return true;
     })
     .sort((a, b) => {
-      if (a.group !== b.group) return (a.group || 0) - (b.group || 0);
-      if (a.role === ROLES.TEACHER) return -1;
-      return (a.stt || 999) - (b.stt || 999); // Sort by STT
+      if (a.group !== b.group) return a.group - b.group;
+      return (a.stt || 999) - (b.stt || 999);
     });
 
   return (
     <div className="bg-white rounded-xl shadow-sm overflow-hidden fade-in">
-      {canViewConfig && (
-        <div className="bg-blue-50 p-4 border-b border-blue-100">
-          <h3 className="font-bold text-blue-900 mb-3 flex items-center gap-2">
-            <Users size={18} /> Cấu hình quyền hạn Tổ trưởng
+      {editingUser && (
+        <UserEditModal
+          targetUser={editingUser}
+          currentUser={currentUser}
+          onClose={() => setEditingUser(null)}
+          onSave={handleSaveUser}
+        />
+      )}
+
+      {/* TEACHER-ONLY: ADMIN PERMISSIONS DELEGATION */}
+      {isTeacher && (
+        <div className="bg-purple-50 p-4 border-b border-purple-100">
+          <h3 className="font-bold text-purple-900 mb-3 flex items-center gap-2">
+            <Settings size={18} /> Cấu hình quyền Lớp trưởng (Admin)
           </h3>
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
-            {[
-              "allowAdd",
-              "allowDelete",
-              "allowEditName",
-              "allowResetPin",
-              "allowMoveGroup",
-            ].map((perm) => (
-              <div
-                key={perm}
-                className="flex items-center justify-between bg-white p-2 rounded border border-blue-100 shadow-sm"
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between bg-white p-2 rounded border border-purple-100">
+              <span className="text-sm text-gray-700">
+                Quản lý thành viên (Thêm/Xóa/Sửa/Chức vụ)
+              </span>
+              <button
+                onClick={() => toggleAdminPermission("canManageUsers")}
+                className={
+                  adminPermissions.canManageUsers
+                    ? "text-green-600"
+                    : "text-gray-400"
+                }
               >
-                <span className="text-xs font-medium text-gray-700">
-                  {perm === "allowAdd"
-                    ? "Thêm HS"
-                    : perm === "allowDelete"
-                    ? "Xóa HS"
-                    : perm === "allowEditName"
-                    ? "Sửa tên"
-                    : perm === "allowResetPin"
-                    ? "Đổi PIN"
-                    : "Chuyển Tổ"}
-                </span>
-                <button
-                  onClick={() => togglePermission(perm)}
-                  className={
-                    managerPermissions[perm]
-                      ? "text-green-600"
-                      : "text-gray-300"
-                  }
-                >
-                  {managerPermissions[perm] ? (
-                    <ToggleRight size={24} />
-                  ) : (
-                    <ToggleLeft size={24} />
-                  )}
-                </button>
-              </div>
-            ))}
+                {adminPermissions.canManageUsers ? (
+                  <ToggleRight size={28} />
+                ) : (
+                  <ToggleLeft size={28} />
+                )}
+              </button>
+            </div>
+            <div className="flex items-center justify-between bg-white p-2 rounded border border-purple-100">
+              <span className="text-sm text-gray-700">Chỉnh sửa Nội quy</span>
+              <button
+                onClick={() => toggleAdminPermission("canManageRules")}
+                className={
+                  adminPermissions.canManageRules
+                    ? "text-green-600"
+                    : "text-gray-400"
+                }
+              >
+                {adminPermissions.canManageRules ? (
+                  <ToggleRight size={28} />
+                ) : (
+                  <ToggleLeft size={28} />
+                )}
+              </button>
+            </div>
+            <div className="flex items-center justify-between bg-white p-2 rounded border border-purple-100">
+              <span className="text-sm text-gray-700">
+                Đổi mã PIN thành viên
+              </span>
+              <button
+                onClick={() => toggleAdminPermission("canResetPin")}
+                className={
+                  adminPermissions.canResetPin
+                    ? "text-green-600"
+                    : "text-gray-400"
+                }
+              >
+                {adminPermissions.canResetPin ? (
+                  <ToggleRight size={28} />
+                ) : (
+                  <ToggleLeft size={28} />
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -575,10 +750,10 @@ const AccountManager = ({
             {isManager ? `Tổ ${currentUser.group}` : "Toàn lớp"}
           </p>
         </div>
-        {canAddUser && (
+        {canManageUsers && (
           <button
             onClick={() => setIsAdding(!isAdding)}
-            className="bg-indigo-600 text-white p-2 rounded-lg hover:bg-indigo-700 text-xs flex items-center gap-1"
+            className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 text-xs flex items-center gap-1"
           >
             <UserPlus size={16} /> Thêm
           </button>
@@ -586,11 +761,11 @@ const AccountManager = ({
       </div>
 
       {isAdding && (
-        <div className="p-4 bg-indigo-50 border-b border-indigo-100 animate-slideDown">
-          <h3 className="text-sm font-bold text-indigo-800 mb-2">
+        <div className="p-4 bg-blue-50 border-b border-blue-100 animate-slideDown">
+          <h3 className="text-sm font-bold text-blue-800 mb-2">
             Thêm thành viên mới
           </h3>
-          <div className="flex gap-2">
+          <div className="flex gap-2 flex-wrap">
             <input
               className="w-16 p-2 text-sm border rounded"
               placeholder="STT"
@@ -604,24 +779,35 @@ const AccountManager = ({
               value={newUser.name}
               onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
             />
-            {!isManager && (
+            <select
+              className="p-2 text-sm border rounded"
+              value={newUser.group}
+              onChange={(e) =>
+                setNewUser({ ...newUser, group: Number(e.target.value) })
+              }
+            >
+              {[1, 2, 3, 4].map((g) => (
+                <option key={g} value={g}>
+                  Tổ {g}
+                </option>
+              ))}
+            </select>
+            {(isTeacher || isAdmin) && (
               <select
-                className="p-2 text-sm border rounded"
-                value={newUser.group}
+                className="p-2 text-sm border rounded font-bold text-indigo-700"
+                value={newUser.role}
                 onChange={(e) =>
-                  setNewUser({ ...newUser, group: e.target.value })
+                  setNewUser({ ...newUser, role: e.target.value })
                 }
               >
-                {[1, 2, 3, 4].map((g) => (
-                  <option key={g} value={g}>
-                    Tổ {g}
-                  </option>
-                ))}
+                <option value={ROLES.STUDENT}>Học sinh</option>
+                <option value={ROLES.MANAGER}>Tổ trưởng</option>
+                <option value={ROLES.ADMIN}>Lớp trưởng</option>
               </select>
             )}
             <button
               onClick={handleAddUser}
-              className="bg-green-600 text-white px-4 py-2 rounded text-sm font-medium"
+              className="bg-green-600 text-white px-4 py-2 rounded text-sm font-medium w-full sm:w-auto"
             >
               Lưu
             </button>
@@ -665,185 +851,45 @@ const AccountManager = ({
                   <User size={16} />
                 )}
               </div>
-              {editingId === user.id && editMode === "name" ? (
-                <input
-                  autoFocus
-                  className="border p-1 rounded text-sm"
-                  value={editValue}
-                  onChange={(e) => setEditValue(e.target.value)}
-                />
-              ) : (
-                <div>
-                  <p className="font-medium text-gray-800 text-sm">
-                    {user.name}
-                  </p>
-                  <p className="text-[10px] text-gray-400 uppercase">
-                    {user.role === ROLES.MANAGER
-                      ? `Tổ trưởng T${user.group}`
-                      : user.role === ROLES.STUDENT
-                      ? `T${user.group}`
-                      : user.role}
-                  </p>
-                </div>
-              )}
+              <div>
+                <p className="font-medium text-gray-800 text-sm">
+                  <span className="text-gray-400 text-xs mr-1 font-normal">
+                    #{user.stt}
+                  </span>
+                  {user.name}
+                </p>
+                <p className="text-[10px] text-gray-400 uppercase">
+                  {ROLE_LABELS[user.role]}
+                </p>
+              </div>
             </div>
-
             <div className="flex items-center gap-2">
-              {/* STT Display & Edit */}
-              {user.role !== ROLES.TEACHER &&
-                (editingId === user.id && editMode === "stt" ? (
-                  <input
-                    className="w-12 p-1 border rounded text-center text-xs"
-                    type="number"
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    autoFocus
-                  />
-                ) : (
-                  <button
-                    onClick={() => {
-                      setEditingId(user.id);
-                      setEditMode("stt");
-                      setEditValue(user.stt || "");
-                    }}
-                    className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-500 text-xs font-bold hover:bg-indigo-100 hover:text-indigo-600"
-                    title="Sửa số thứ tự"
-                  >
-                    {user.stt || "#"}
-                  </button>
-                ))}
-
-              {editingId === user.id && editMode !== "stt" ? (
+              {/* Check Permissions */}
+              {canManageUsers && user.role !== ROLES.TEACHER && (
                 <>
-                  {editMode === "pin" && (
-                    <input
-                      className="w-16 p-1 border rounded text-center text-xs"
-                      placeholder="PIN"
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      autoFocus
-                    />
-                  )}
-                  {editMode === "group" && (
-                    <select
-                      className="p-1 border rounded text-sm"
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      autoFocus
-                    >
-                      {[1, 2, 3, 4].map((g) => (
-                        <option key={g} value={g}>
-                          Tổ {g}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  {editMode === "role" && (
-                    <div className="flex flex-col gap-1">
-                      <select
-                        className="p-1 border rounded text-sm"
-                        value={editValue}
-                        onChange={(e) => setEditValue(e.target.value)}
-                        autoFocus
-                      >
-                        <option value={ROLES.STUDENT}>Học sinh</option>
-                        <option value={ROLES.MANAGER}>Tổ trưởng</option>
-                        <option value={ROLES.ADMIN}>Lớp trưởng</option>
-                      </select>
-                      {editValue === ROLES.MANAGER && (
-                        <select
-                          className="p-1 border rounded text-sm"
-                          value={targetGroup}
-                          onChange={(e) => setTargetGroup(e.target.value)}
-                        >
-                          <option value={1}>Tổ 1</option>
-                          <option value={2}>Tổ 2</option>
-                          <option value={3}>Tổ 3</option>
-                          <option value={4}>Tổ 4</option>
-                        </select>
-                      )}
-                    </div>
-                  )}
                   <button
-                    onClick={() => handleSaveEdit(user.id)}
-                    className="p-1 text-green-600 bg-green-50 rounded"
+                    onClick={() => setEditingUser(user)}
+                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                    title="Sửa thông tin"
                   >
-                    <Save size={16} />
+                    <UserCog size={18} />
                   </button>
-                  <button
-                    onClick={() => {
-                      setEditingId(null);
-                      setEditMode(null);
-                    }}
-                    className="p-1 text-red-600 bg-red-50 rounded"
-                  >
-                    <X size={16} />
-                  </button>
-                </>
-              ) : (
-                <>
-                  {(isTeacher || isAdmin) && user.role !== ROLES.TEACHER && (
+                  {(isTeacher || (isAdmin && adminPermissions.canResetPin)) && (
                     <button
-                      onClick={() => {
-                        setEditingId(user.id);
-                        setEditMode("role");
-                        setEditValue(user.role);
-                        setTargetGroup(user.group || 1);
-                      }}
-                      className="p-1.5 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded"
-                      title="Đổi chức vụ"
-                    >
-                      <Briefcase size={16} />
-                    </button>
-                  )}
-                  {checkPermission("editName", user) && (
-                    <button
-                      onClick={() => {
-                        setEditingId(user.id);
-                        setEditMode("name");
-                        setEditValue(user.name);
-                      }}
-                      className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-                      title="Sửa tên"
-                    >
-                      <Edit3 size={16} />
-                    </button>
-                  )}
-                  {checkPermission("moveGroup", user) && (
-                    <button
-                      onClick={() => {
-                        setEditingId(user.id);
-                        setEditMode("group");
-                        setEditValue(user.group);
-                      }}
-                      className="p-1.5 text-gray-400 hover:text-orange-600 hover:bg-orange-50 rounded"
-                      title="Chuyển Tổ"
-                    >
-                      <ArrowRightLeft size={16} />
-                    </button>
-                  )}
-                  {checkPermission("resetPin", user) && (
-                    <button
-                      onClick={() => {
-                        setEditingId(user.id);
-                        setEditMode("pin");
-                        setEditValue(user.pin);
-                      }}
+                      onClick={() => handleResetPin(user)}
                       className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded"
                       title="Đổi PIN"
                     >
                       <Key size={16} />
                     </button>
                   )}
-                  {checkPermission("delete", user) && (
-                    <button
-                      onClick={() => handleDeleteUser(user.id)}
-                      className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                      title="Xóa"
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  )}
+                  <button
+                    onClick={() => handleDeleteUser(user.id)}
+                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                    title="Xóa thành viên"
+                  >
+                    <Trash2 size={16} />
+                  </button>
                 </>
               )}
             </div>
@@ -856,104 +902,149 @@ const AccountManager = ({
 
 // 4. Dashboard
 const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
-  const { users, weeklyData, rules, months, managerPermissions } = dbState;
-  const [activeMonthId, setActiveMonthId] = useState(months[0]?.id || 1);
+  const { users, weeklyData, rules, years = [], adminPermissions } = dbState;
+
+  const [activeYearId, setActiveYearId] = useState(
+    years.length > 0 ? years[years.length - 1].id : 2024
+  );
+  const [activeMonthId, setActiveMonthId] = useState(1);
   const [activeWeek, setActiveWeek] = useState(1);
+
   const [activeTab, setActiveTab] = useState(
     currentUser.role === ROLES.STUDENT ? "overview" : "input"
   );
   const [expandedGroup, setExpandedGroup] = useState(null);
+
+  const [startMonth, setStartMonth] = useState(1);
+  const [endMonth, setEndMonth] = useState(1);
+
   const [newRule, setNewRule] = useState({
     label: "",
     fine: 0,
     points: -2,
     type: "penalty",
   });
-
-  // Range Filter
-  const [startMonthId, setStartMonthId] = useState(1);
-  const [endMonthId, setEndMonthId] = useState(
-    months.length > 0 ? months[months.length - 1].id : 1
-  );
-
+  const [editingRuleId, setEditingRuleId] = useState(null);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
-
-  useEffect(() => {
-    if (months.length > 0) setEndMonthId(months[months.length - 1].id);
-  }, [months]);
 
   const isTeacher = currentUser.role === ROLES.TEACHER;
   const isAdmin = currentUser.role === ROLES.ADMIN;
   const isManager = currentUser.role === ROLES.MANAGER;
   const isStudent = currentUser.role === ROLES.STUDENT;
   const canManageAccount = !isStudent;
-  const canManageRules = isTeacher || isAdmin;
 
-  const activeMonthLabel =
-    months.find((m) => m.id === activeMonthId)?.name || "Tháng ?";
-  const getKey = (monthId, weekId) => `m${monthId}_w${weekId}`;
-  const getStudentData = (userId, monthId, weekId) =>
-    weeklyData[getKey(monthId, weekId)]?.[userId] || {
+  // Kiểm tra quyền sửa nội quy
+  const canManageRules =
+    isTeacher || (isAdmin && adminPermissions.canManageRules);
+
+  const getKey = (year, month, week) => `y${year}_m${month}_w${week}`;
+
+  const getStudentData = (userId, year, month, week) =>
+    weeklyData[getKey(year, month, week)]?.[userId] || {
       score: 80,
       fines: 0,
       violations: [],
     };
 
-  // Filter & Sort
   const studentList = Object.values(users)
     .filter((u) => u.role === ROLES.STUDENT || u.role === ROLES.MANAGER)
-    .sort((a, b) => {
-      if (a.group !== b.group) return (a.group || 0) - (b.group || 0);
-      return (a.stt || 999) - (b.stt || 999); // Sort by STT in input list too
-    });
+    .sort((a, b) => a.stt - b.stt);
 
-  const detailedStats = useMemo(() => {
+  const activeMonthLabel =
+    activeMonthId === "ALL" ? "Cả Năm" : `Tháng ${activeMonthId}`;
+
+  // STATS FOR OVERVIEW TAB
+  const overviewStats = useMemo(() => {
     return studentList
       .map((student) => {
-        let rangeTotalScore = 0;
-        let rangeTotalFines = 0;
-        let weeksCounted = 0;
         let currentMonthTotalScore = 0;
         let currentMonthTotalFines = 0;
         let weeklyFines = {};
 
-        // Range calc
-        for (let mId = startMonthId; mId <= endMonthId; mId++) {
-          const monthExists = months.find((m) => m.id === mId);
-          if (monthExists) {
+        if (activeMonthId === "ALL") {
+          let totalScoreAllTime = 0;
+          let totalWeeks = 0;
+          FIXED_MONTHS.forEach((m) => {
             for (let w = 1; w <= 4; w++) {
-              const data = getStudentData(student.id, mId, w);
-              rangeTotalScore += data.score;
-              rangeTotalFines += data.fines;
-              weeksCounted++;
+              const data = getStudentData(student.id, activeYearId, m.id, w);
+              totalScoreAllTime += data.score;
+              currentMonthTotalFines += data.fines;
+              totalWeeks++;
             }
+          });
+          currentMonthTotalScore =
+            totalWeeks > 0 ? (totalScoreAllTime / totalWeeks) * 4 : 320;
+        } else {
+          for (let w = 1; w <= 4; w++) {
+            const data = getStudentData(
+              student.id,
+              activeYearId,
+              activeMonthId,
+              w
+            );
+            currentMonthTotalScore += data.score;
+            currentMonthTotalFines += data.fines;
+            weeklyFines[w] = data.fines;
           }
         }
-
-        // Current month calc
-        for (let w = 1; w <= 4; w++) {
-          const data = getStudentData(student.id, activeMonthId, w);
-          currentMonthTotalScore += data.score;
-          currentMonthTotalFines += data.fines;
-          weeklyFines[w] = data.fines;
-        }
-
         return {
           ...student,
-          rangeAvgScore: weeksCounted > 0 ? rangeTotalScore / weeksCounted : 80,
-          rangeTotalFines: rangeTotalFines,
           currentMonthAvg: currentMonthTotalScore / 4,
           currentMonthFines: currentMonthTotalFines,
           weeklyFines,
         };
       })
-      .sort((a, b) => b.rangeAvgScore - a.rangeAvgScore); // Ranking still by score
-  }, [users, weeklyData, startMonthId, endMonthId, months, activeMonthId]);
+      .sort((a, b) => b.currentMonthAvg - a.currentMonthAvg);
+  }, [users, weeklyData, activeMonthId, activeYearId]);
+
+  // CUSTOM RANGE STATS
+  const rangeStats = useMemo(() => {
+    const results = studentList
+      .map((student) => {
+        let totalScore = 0;
+        let totalFines = 0;
+        let weeksCount = 0;
+
+        for (let m = startMonth; m <= endMonth; m++) {
+          for (let w = 1; w <= 4; w++) {
+            const data = getStudentData(student.id, activeYearId, m, w);
+            totalScore += data.score;
+            totalFines += data.fines;
+            weeksCount++;
+          }
+        }
+
+        const avgScore = weeksCount > 0 ? totalScore / weeksCount : 80;
+
+        return {
+          ...student,
+          rangeAvg: avgScore,
+          rangeFines: totalFines,
+        };
+      })
+      .sort((a, b) => b.rangeAvg - a.rangeAvg);
+
+    // *** PRIVACY FILTER: Student only sees themselves ***
+    if (isStudent) {
+      return results.filter((s) => s.id === currentUser.id);
+    }
+    return results;
+  }, [
+    users,
+    weeklyData,
+    activeYearId,
+    startMonth,
+    endMonth,
+    isStudent,
+    currentUser.id,
+  ]);
 
   const handleChangeSelfPassword = (newPin) => {
-    const updatedUser = { ...currentUser, pin: newPin };
-    const updatedUsersList = { ...users, [currentUser.id]: updatedUser };
-    updateData({ users: updatedUsersList });
+    const updatedUsers = {
+      ...users,
+      [currentUser.id]: { ...currentUser, pin: newPin },
+    };
+    updateData({ users: updatedUsers });
     setShowPasswordModal(false);
     alert("Đổi mật khẩu thành công!");
   };
@@ -962,7 +1053,12 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     if (isStudent) return;
     const rule = rules.find((r) => r.id === ruleId);
     if (!rule) return;
-    const cD = getStudentData(targetId, activeMonthId, activeWeek);
+    const cD = getStudentData(
+      targetId,
+      activeYearId,
+      activeMonthId,
+      activeWeek
+    );
     const nE = {
       id: Date.now(),
       ruleId: rule.id,
@@ -981,8 +1077,9 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     updateData({
       weeklyData: {
         ...weeklyData,
-        [getKey(activeMonthId, activeWeek)]: {
-          ...(weeklyData[getKey(activeMonthId, activeWeek)] || {}),
+        [getKey(activeYearId, activeMonthId, activeWeek)]: {
+          ...(weeklyData[getKey(activeYearId, activeMonthId, activeWeek)] ||
+            {}),
           [targetId]: uD,
         },
       },
@@ -991,7 +1088,12 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
 
   const handleRemoveViolation = (targetId, entryId) => {
     if (isStudent) return;
-    const cD = getStudentData(targetId, activeMonthId, activeWeek);
+    const cD = getStudentData(
+      targetId,
+      activeYearId,
+      activeMonthId,
+      activeWeek
+    );
     const entry = cD.violations.find((v) => v.id === entryId);
     if (!entry) return;
     const uD = {
@@ -1003,50 +1105,64 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     updateData({
       weeklyData: {
         ...weeklyData,
-        [getKey(activeMonthId, activeWeek)]: {
-          ...(weeklyData[getKey(activeMonthId, activeWeek)] || {}),
+        [getKey(activeYearId, activeMonthId, activeWeek)]: {
+          ...(weeklyData[getKey(activeYearId, activeMonthId, activeWeek)] ||
+            {}),
           [targetId]: uD,
         },
       },
     });
   };
 
-  const handleAddMonth = () => {
+  const handleAddYear = () => {
     if (!isTeacher && !isAdmin) return;
-    const nextId =
-      months.length > 0 ? Math.max(...months.map((m) => m.id)) + 1 : 1;
-    updateData({
-      months: [...months, { id: nextId, name: `Tháng ${nextId}` }],
-    });
-    setActiveMonthId(nextId);
-    setActiveWeek(1);
-    alert("Đã thêm tháng mới!");
+    const newYear = activeYearId + 1;
+    const newYearName = `Năm học ${newYear}-${newYear + 1}`;
+    if (confirm(`Bạn có chắc muốn tạo năm học mới: ${newYearName}?`)) {
+      updateData({ years: [...years, { id: newYear, name: newYearName }] });
+      setActiveYearId(newYear);
+      alert("Đã qua năm mới thành công!");
+    }
   };
 
-  const handleAddRule = () => {
+  // --- RULES MANAGEMENT ---
+  const handleSaveRule = () => {
     if (!newRule.label) return;
-    updateData({
-      rules: [
-        ...rules,
-        {
-          ...newRule,
-          id: `r_${Date.now()}`,
-          fine: Number(newRule.fine),
-          points: Number(newRule.points),
-        },
-      ],
-    });
+    if (editingRuleId) {
+      const updatedRules = rules.map((r) =>
+        r.id === editingRuleId ? { ...newRule, id: editingRuleId } : r
+      );
+      updateData({ rules: updatedRules });
+      setEditingRuleId(null);
+    } else {
+      updateData({
+        rules: [
+          ...rules,
+          {
+            ...newRule,
+            id: `r_${Date.now()}`,
+            fine: Number(newRule.fine),
+            points: Number(newRule.points),
+          },
+        ],
+      });
+    }
     setNewRule({ label: "", fine: 0, points: -2, type: "penalty" });
+  };
+
+  const startEditingRule = (rule) => {
+    setEditingRuleId(rule.id);
+    setNewRule({ ...rule });
   };
   const handleDeleteRule = (id) => {
     if (confirm("Xóa?"))
       updateData({ rules: rules.filter((r) => r.id !== id) });
   };
 
-  const renderInputList = () => {
-    const inputGroups = isManager ? [currentUser.group] : [1, 2, 3, 4];
-    return inputGroups.map((groupId) => {
+  const renderInputList = () =>
+    [1, 2, 3, 4].map((groupId) => {
       const groupMembers = studentList.filter((s) => s.group === groupId);
+      if (isManager && currentUser.group !== groupId) return null;
       const isExpanded = expandedGroup === groupId;
       return (
         <div
@@ -1058,9 +1174,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
             className="p-4 flex justify-between items-center cursor-pointer bg-gray-50 hover:bg-gray-100"
           >
             <div className="flex items-center gap-3">
-              <div
-                className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-white bg-blue-500`}
-              >
+              <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-white bg-blue-500">
                 T{groupId}
               </div>
               <div>
@@ -1081,6 +1195,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
               {groupMembers.map((student) => {
                 const sData = getStudentData(
                   student.id,
+                  activeYearId,
                   activeMonthId,
                   activeWeek
                 );
@@ -1088,14 +1203,9 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                 return (
                   <div key={student.id} className="p-4 hover:bg-blue-50">
                     <div className="flex justify-between items-center mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="bg-gray-100 text-gray-500 text-xs px-1.5 py-0.5 rounded font-mono font-bold">
-                          {student.stt || "#"}
-                        </span>
-                        <span className="font-semibold text-gray-800">
-                          {student.name}
-                        </span>
-                      </div>
+                      <span className="font-semibold text-gray-800">
+                        {student.stt}. {student.name}
+                      </span>
                       <span
                         className={`text-xs px-2 py-1 rounded-full font-bold ${rating.color}`}
                       >
@@ -1175,7 +1285,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         </div>
       );
     });
-  };
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -1186,52 +1295,73 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
           onSave={handleChangeSelfPassword}
         />
       )}
-
       <header className="bg-white shadow-sm sticky top-0 z-20">
-        {activeTab === "input" && (
-          <div className="max-w-3xl mx-auto px-4 py-2 flex justify-between items-center border-b border-gray-100">
-            <div className="flex items-center gap-2">
-              <div className="bg-blue-100 p-2 rounded-lg text-blue-700">
-                <Calendar size={20} />
-              </div>
+        <div className="max-w-3xl mx-auto px-4 py-2 flex justify-between items-center border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
               <select
-                value={activeMonthId}
-                onChange={(e) => {
-                  setActiveMonthId(Number(e.target.value));
-                  setActiveWeek(1);
-                }}
-                className="font-bold text-lg text-gray-800 bg-transparent outline-none cursor-pointer hover:text-blue-600"
+                value={activeYearId}
+                onChange={(e) => setActiveYearId(Number(e.target.value))}
+                className="bg-transparent text-xs font-bold text-gray-700 outline-none p-1"
               >
-                {months.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
+                {years.map((y) => (
+                  <option key={y.id} value={y.id}>
+                    {y.name}
                   </option>
                 ))}
               </select>
               {(isTeacher || isAdmin) && (
-                <button onClick={handleAddMonth} className="text-blue-500">
-                  <PlusCircle size={20} />
+                <button
+                  onClick={handleAddYear}
+                  className="text-indigo-600 hover:bg-indigo-200 p-1 rounded"
+                >
+                  <PlusCircle size={14} />
                 </button>
               )}
             </div>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowPasswordModal(true)}
-                className="p-2 text-gray-500 hover:text-blue-600 bg-gray-50 rounded-full"
-                title="Đổi mật khẩu"
-              >
-                <Lock size={18} />
-              </button>
-              <button
-                onClick={onLogout}
-                className="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-red-50 hover:text-red-500"
-              >
-                <LogOut size={18} />
-              </button>
+            <div className="bg-indigo-100 p-2 rounded-lg text-indigo-700">
+              <Calendar size={20} />
             </div>
+            <select
+              value={activeMonthId}
+              onChange={(e) => {
+                const val =
+                  e.target.value === "ALL" ? "ALL" : Number(e.target.value);
+                setActiveMonthId(val);
+                setActiveWeek(1);
+              }}
+              className="font-bold text-lg text-gray-800 bg-transparent outline-none cursor-pointer hover:text-indigo-600"
+            >
+              {FIXED_MONTHS.map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+              <option value="ALL">Cả Năm</option>
+            </select>
           </div>
-        )}
-        {activeTab === "input" && (
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowPasswordModal(true)}
+              className="p-2 text-gray-500 hover:text-indigo-600 bg-gray-50 rounded-full"
+            >
+              <Lock size={18} />
+            </button>
+            <div className="text-right hidden sm:block">
+              <p className="text-sm font-bold text-gray-800">
+                {currentUser.name}
+              </p>
+              <p className="text-xs text-gray-500">{currentUser.role}</p>
+            </div>
+            <button
+              onClick={onLogout}
+              className="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-red-50 hover:text-red-500"
+            >
+              <LogOut size={18} />
+            </button>
+          </div>
+        </div>
+        {activeMonthId !== "ALL" && (
           <div className="max-w-3xl mx-auto px-4 py-2 bg-gray-50/50 backdrop-blur-sm flex justify-between gap-2">
             {[1, 2, 3, 4].map((w) => (
               <button
@@ -1239,7 +1369,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                 onClick={() => setActiveWeek(w)}
                 className={`flex-1 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all ${
                   activeWeek === w
-                    ? "bg-blue-600 text-white shadow-md"
+                    ? "bg-indigo-600 text-white shadow-md"
                     : "bg-white text-gray-500 border border-gray-200"
                 }`}
               >
@@ -1248,137 +1378,201 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
             ))}
           </div>
         )}
-        {activeTab !== "input" && (
-          <div className="max-w-3xl mx-auto px-4 py-3 flex justify-between items-center border-b border-gray-100">
-            <h1 className="font-bold text-xl text-gray-800">Lớp Học Vui Vẻ</h1>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={() => setShowPasswordModal(true)}
-                className="p-2 text-gray-500 hover:text-blue-600 bg-gray-50 rounded-full"
-              >
-                <Lock size={18} />
-              </button>
-              <button
-                onClick={onLogout}
-                className="p-2 bg-gray-100 rounded-full text-gray-500 hover:bg-red-50 hover:text-red-500"
-              >
-                <LogOut size={18} />
-              </button>
-            </div>
-          </div>
-        )}
       </header>
 
       <main className="max-w-3xl mx-auto p-4">
+        {/* TAB: TỔNG QUAN (TÀI CHÍNH) */}
         {activeTab === "overview" && (
           <div className="fade-in bg-white rounded-xl shadow-sm overflow-hidden">
             <div className="p-4 bg-indigo-50 border-b border-indigo-100">
-              <h2 className="font-bold text-indigo-900 mb-3 flex items-center gap-2">
-                <BarChart2 size={20} /> Báo Cáo Tùy Chỉnh
+              <h2 className="font-bold text-indigo-900">
+                Tổng Kết {activeMonthLabel}
               </h2>
-              <div className="flex gap-2 items-center text-sm">
-                <span>Từ:</span>
-                <select
-                  className="border rounded p-1 bg-white"
-                  value={startMonthId}
-                  onChange={(e) => {
-                    const val = Number(e.target.value);
-                    if (val <= endMonthId) setStartMonthId(val);
-                  }}
-                >
-                  {months.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-                <span>Đến:</span>
-                <select
-                  className="border rounded p-1 bg-white"
-                  value={endMonthId}
-                  onChange={(e) => {
-                    const val = Number(e.target.value);
-                    if (val >= startMonthId) setEndMonthId(val);
-                  }}
-                >
-                  {months.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
             </div>
-
             <div className="overflow-x-auto">
               <table className="w-full text-sm text-left">
                 <thead className="bg-gray-50 text-gray-500">
                   <tr>
-                    <th className="p-3 min-w-[120px]">Họ tên</th>
-                    <th className="p-3 text-right w-24">ĐTB Giai đoạn</th>
-                    <th className="p-3 text-right w-24 text-red-600 font-bold">
-                      Tổng Phạt
+                    <th className="p-3 min-w-[140px]">Họ tên</th>
+                    <th className="p-3 text-right">TB</th>
+                    {activeMonthId !== "ALL" &&
+                      [1, 2, 3, 4].map((t) => (
+                        <th
+                          key={t}
+                          className="p-3 text-right bg-red-50 text-red-600"
+                        >
+                          T{t}
+                        </th>
+                      ))}
+                    <th className="p-3 text-right font-bold text-red-700 bg-red-100">
+                      Phạt
                     </th>
-                    <th className="p-3 text-right w-24">Xếp loại</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {detailedStats.map((s, i) => {
-                    const rating = getRating(s.rangeAvgScore);
-                    return (
+                  {overviewStats
+                    .filter((s) => {
+                      // *** PRIVACY FILTER FOR OVERVIEW ***
+                      if (isStudent) return s.id === currentUser.id;
+                      if (isManager) return s.group === currentUser.group;
+                      return true;
+                    })
+                    .map((s) => (
                       <tr key={s.id} className="hover:bg-gray-50">
                         <td className="p-3 font-medium text-gray-800">
+                          <span className="text-gray-400 text-xs mr-1">
+                            {s.stt}.
+                          </span>
                           {s.name}
-                          <div className="flex items-center gap-1 text-[10px] text-gray-400">
-                            <span className="font-bold">#{s.stt || "-"}</span>
-                            <span>Tổ {s.group}</span>
-                          </div>
                         </td>
                         <td className="p-3 text-right font-bold text-indigo-600">
-                          {s.rangeAvgScore.toFixed(1)}
+                          {s.currentMonthAvg.toFixed(1)}
                         </td>
-                        <td className="p-3 text-right font-bold text-red-600 bg-red-50/30">
-                          {s.rangeTotalFines > 0
-                            ? formatMoney(s.rangeTotalFines)
-                            : "-"}
-                        </td>
-                        <td className="p-3 text-right">
-                          <span
-                            className={`text-xs px-2 py-1 rounded font-bold ${rating.color}`}
-                          >
-                            {rating.label}
-                          </span>
+                        {activeMonthId !== "ALL" &&
+                          [1, 2, 3, 4].map((w) => (
+                            <td key={w} className="p-3 text-right text-xs">
+                              {s.weeklyFines[w] > 0
+                                ? formatMoney(s.weeklyFines[w])
+                                : "-"}
+                            </td>
+                          ))}
+                        <td className="p-3 text-right font-bold text-red-600 bg-red-50/50">
+                          {s.currentMonthFines > 0
+                            ? formatMoney(s.currentMonthFines)
+                            : "0"}
                         </td>
                       </tr>
-                    );
-                  })}
+                    ))}
                 </tbody>
               </table>
             </div>
           </div>
         )}
 
+        {/* TAB: THỐNG KÊ TÙY CHỌN */}
+        {activeTab === "stats" && (
+          <div className="fade-in space-y-4">
+            <div className="bg-white rounded-xl shadow-sm p-4">
+              <div className="flex items-center gap-2 mb-4">
+                <BarChart2 className="text-orange-500" />
+                <h2 className="font-bold text-gray-800">Thống kê tùy chọn</h2>
+              </div>
+              <div className="flex gap-2 items-center mb-2">
+                <div className="flex-1">
+                  <label className="text-xs text-gray-500 block mb-1">
+                    Từ tháng
+                  </label>
+                  <select
+                    value={startMonth}
+                    onChange={(e) => setStartMonth(Number(e.target.value))}
+                    className="w-full p-2 border rounded bg-gray-50"
+                  >
+                    {FIXED_MONTHS.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <ArrowRightLeft size={16} className="text-gray-400 mt-4" />
+                <div className="flex-1">
+                  <label className="text-xs text-gray-500 block mb-1">
+                    Đến tháng
+                  </label>
+                  <select
+                    value={endMonth}
+                    onChange={(e) => setEndMonth(Number(e.target.value))}
+                    className="w-full p-2 border rounded bg-gray-50"
+                  >
+                    {FIXED_MONTHS.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              {endMonth < startMonth && (
+                <p className="text-red-500 text-xs">
+                  Tháng kết thúc phải lớn hơn hoặc bằng tháng bắt đầu
+                </p>
+              )}
+            </div>
+
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+              <div className="p-3 bg-orange-50 border-b border-orange-100 text-xs text-orange-800 font-medium">
+                Kết quả: Tháng {startMonth} - {endMonth} ({rangeStats.length}{" "}
+                kết quả)
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-gray-50 text-gray-500">
+                    <tr>
+                      <th className="p-3">Họ tên</th>
+                      <th className="p-3 text-right">ĐTB Hạnh Kiểm</th>
+                      <th className="p-3 text-right">Tổng Tiền Phạt</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {rangeStats.map((s) => (
+                      <tr key={s.id} className="hover:bg-gray-50">
+                        <td className="p-3 font-medium text-gray-800">
+                          <span className="text-gray-400 text-xs mr-1">
+                            {s.stt}.
+                          </span>
+                          {s.name}
+                        </td>
+                        <td className="p-3 text-right font-bold text-blue-600">
+                          {s.rangeAvg.toFixed(1)}
+                        </td>
+                        <td className="p-3 text-right font-bold text-red-600">
+                          {formatMoney(s.rangeFines)}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: CHẤM ĐIỂM */}
         {activeTab === "input" && (
           <div className="fade-in">{renderInputList()}</div>
         )}
 
-        {canManageAccount && activeTab === "accounts" && (
-          <AccountManager
-            users={users}
-            updateData={updateData}
-            currentUser={currentUser}
-            managerPermissions={managerPermissions}
-          />
-        )}
-
+        {/* TAB: QUẢN LÝ NỘI QUY */}
         {!isStudent && activeTab === "rules" && (
           <div className="bg-white rounded-xl shadow-sm p-4 fade-in">
-            <h2 className="font-bold text-gray-800 mb-4">Danh sách Nội quy</h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="font-bold text-gray-800">Danh sách Nội quy</h2>
+              {editingRuleId && (
+                <button
+                  onClick={() => {
+                    setEditingRuleId(null);
+                    setNewRule({
+                      label: "",
+                      fine: 0,
+                      points: -2,
+                      type: "penalty",
+                    });
+                  }}
+                  className="text-sm text-gray-500 hover:text-red-500 flex items-center gap-1"
+                >
+                  <RefreshCw size={14} /> Hủy sửa
+                </button>
+              )}
+            </div>
             <div className="space-y-2 mb-4">
               {rules.map((r) => (
                 <div
                   key={r.id}
-                  className="flex justify-between items-center p-2 border rounded bg-gray-50"
+                  className={`flex justify-between items-center p-2 border rounded ${
+                    editingRuleId === r.id
+                      ? "border-indigo-500 bg-indigo-50"
+                      : "bg-gray-50"
+                  }`}
                 >
                   <div>
                     <p className="text-sm font-medium">{r.label}</p>
@@ -1392,18 +1586,29 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                     </p>
                   </div>
                   {canManageRules && (
-                    <button
-                      onClick={() => handleDeleteRule(r.id)}
-                      className="text-gray-400 hover:text-red-500"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => startEditingRule(r)}
+                        className="text-gray-400 hover:text-blue-500"
+                      >
+                        <Edit3 size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteRule(r.id)}
+                        className="text-gray-400 hover:text-red-500"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   )}
                 </div>
               ))}
             </div>
             {canManageRules && (
               <div className="pt-4 border-t border-gray-100 space-y-2">
+                <h3 className="text-sm font-bold text-gray-700">
+                  {editingRuleId ? "Sửa quy định" : "Thêm quy định mới"}
+                </h3>
                 <input
                   placeholder="Tên quy định"
                   className="w-full p-2 border rounded text-sm"
@@ -1413,10 +1618,24 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                   }
                 />
                 <div className="flex gap-2">
+                  <select
+                    className={`w-1/3 p-2 border rounded text-sm font-bold ${
+                      newRule.type === "bonus"
+                        ? "text-green-600"
+                        : "text-red-600"
+                    }`}
+                    value={newRule.type}
+                    onChange={(e) =>
+                      setNewRule({ ...newRule, type: e.target.value })
+                    }
+                  >
+                    <option value="penalty">Vi phạm (Đỏ)</option>
+                    <option value="bonus">Khen thưởng (Xanh)</option>
+                  </select>
                   <input
                     type="number"
-                    placeholder="Điểm (+/-)"
-                    className="w-1/3 p-2 border rounded text-sm"
+                    placeholder="Điểm"
+                    className="w-1/4 p-2 border rounded text-sm"
                     value={newRule.points}
                     onChange={(e) =>
                       setNewRule({ ...newRule, points: Number(e.target.value) })
@@ -1425,22 +1644,36 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                   <input
                     type="number"
                     placeholder="Tiền phạt"
-                    className="w-1/3 p-2 border rounded text-sm"
+                    className="w-1/4 p-2 border rounded text-sm"
                     value={newRule.fine}
                     onChange={(e) =>
                       setNewRule({ ...newRule, fine: Number(e.target.value) })
                     }
                   />
-                  <button
-                    onClick={handleAddRule}
-                    className="w-1/3 bg-blue-600 text-white rounded text-sm font-medium"
-                  >
-                    Thêm
-                  </button>
                 </div>
+                <button
+                  onClick={handleSaveRule}
+                  className={`w-full ${
+                    editingRuleId
+                      ? "bg-orange-500 hover:bg-orange-600"
+                      : "bg-indigo-600 hover:bg-indigo-700"
+                  } text-white rounded text-sm font-medium py-2`}
+                >
+                  {editingRuleId ? "Cập nhật" : "Thêm mới"}
+                </button>
               </div>
             )}
           </div>
+        )}
+
+        {/* TAB: QUẢN LÝ NHÂN SỰ (CHỈ GV/LT/TT) */}
+        {canManageAccount && activeTab === "accounts" && (
+          <AccountManager
+            users={users}
+            updateData={updateData}
+            currentUser={currentUser}
+            adminPermissions={adminPermissions || DEFAULT_PERMISSIONS}
+          />
         )}
       </main>
 
@@ -1450,19 +1683,30 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
             onClick={() => setActiveTab("overview")}
             className={`flex flex-col items-center p-2 rounded-lg ${
               activeTab === "overview"
-                ? "text-blue-600 bg-blue-50"
+                ? "text-indigo-600 bg-indigo-50"
                 : "text-gray-400"
             }`}
           >
             <ClipboardList size={20} />
             <span className="text-[10px] mt-1">Tài chính</span>
           </button>
+          <button
+            onClick={() => setActiveTab("stats")}
+            className={`flex flex-col items-center p-2 rounded-lg ${
+              activeTab === "stats"
+                ? "text-indigo-600 bg-indigo-50"
+                : "text-gray-400"
+            }`}
+          >
+            <BarChart2 size={20} />
+            <span className="text-[10px] mt-1">Thống kê</span>
+          </button>
           {!isStudent && (
             <button
               onClick={() => setActiveTab("input")}
               className={`flex flex-col items-center p-2 rounded-lg ${
                 activeTab === "input"
-                  ? "text-blue-600 bg-blue-50"
+                  ? "text-indigo-600 bg-indigo-50"
                   : "text-gray-400"
               }`}
             >
@@ -1475,7 +1719,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
               onClick={() => setActiveTab("rules")}
               className={`flex flex-col items-center p-2 rounded-lg ${
                 activeTab === "rules"
-                  ? "text-blue-600 bg-blue-50"
+                  ? "text-indigo-600 bg-indigo-50"
                   : "text-gray-400"
               }`}
             >
@@ -1488,7 +1732,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
               onClick={() => setActiveTab("accounts")}
               className={`flex flex-col items-center p-2 rounded-lg ${
                 activeTab === "accounts"
-                  ? "text-blue-600 bg-blue-50"
+                  ? "text-indigo-600 bg-indigo-50"
                   : "text-gray-400"
               }`}
             >
@@ -1528,7 +1772,7 @@ export default function App() {
       appId,
       "public",
       "data",
-      "classData_v16",
+      "classData_v13",
       "main"
     );
     return onSnapshot(docRef, async (snap) => {
@@ -1551,7 +1795,6 @@ export default function App() {
       role: ROLES.ADMIN,
       pin: "8888",
       group: 1,
-      stt: 0,
     };
     for (let i = 1; i <= 4; i++)
       users[`mgr${i}`] = {
@@ -1560,59 +1803,26 @@ export default function App() {
         role: ROLES.MANAGER,
         pin: "1234",
         group: i,
-        stt: 0,
       };
-    const firstNames = [
-      "An",
-      "Bình",
-      "Chi",
-      "Dũng",
-      "Giang",
-      "Hương",
-      "Khánh",
-      "Linh",
-      "Minh",
-      "Nam",
-      "Oanh",
-      "Phúc",
-      "Quang",
-      "Sơn",
-      "Thảo",
-      "Uyên",
-      "Vinh",
-      "Yến",
-      "Tú",
-      "Hải",
-      "Đức",
-      "Long",
-      "Nhi",
-      "Trang",
-      "Hiếu",
-      "Việt",
-      "Hoàng",
-      "Dương",
-    ];
-    let k = 0;
-    for (let i = 1; i <= 4; i++) {
-      for (let j = 1; j <= 7; j++) {
-        const id = `s${i}_${j}`;
-        const name = `Nguyễn ${firstNames[k++] || "HS " + k}`;
-        users[id] = {
-          id,
-          name,
-          role: ROLES.STUDENT,
-          pin: "0000",
-          group: i,
-          stt: j,
-        };
-      }
-    }
+
+    REAL_STUDENTS.forEach((name, index) => {
+      const id = `s_${index + 1}`;
+      users[id] = {
+        id,
+        name,
+        stt: index + 1,
+        role: ROLES.STUDENT,
+        pin: "0000",
+        group: (index % 4) + 1,
+      };
+    });
+
     return {
       users,
       rules: DEFAULT_RULES,
-      months: [{ id: 1, name: "Tháng 1" }],
+      years: [{ id: 2024, name: "Năm học 2024-2025" }],
       weeklyData: {},
-      managerPermissions: DEFAULT_MANAGER_PERMISSIONS,
+      adminPermissions: DEFAULT_PERMISSIONS,
     };
   };
 
@@ -1624,14 +1834,14 @@ export default function App() {
       appId,
       "public",
       "data",
-      "classData_v16",
+      "classData_v13",
       "main"
     );
     await updateDoc(docRef, newData);
   };
   if (!dbState)
     return (
-      <div className="min-h-screen flex items-center justify-center text-blue-600 font-bold">
+      <div className="min-h-screen flex items-center justify-center text-indigo-600 font-bold">
         Đang tải dữ liệu...
       </div>
     );
