@@ -42,7 +42,9 @@ import {
   Lock,
   BarChart2,
   UserCog,
-  Eye, // Icon con mắt cho chế độ xem
+  Eye,
+  Wallet, // Icon ví tiền
+  TrendingUp, // Icon biểu đồ tăng trưởng
 } from "lucide-react";
 
 // --- FIREBASE SETUP ---
@@ -73,14 +75,6 @@ const ROLE_LABELS = {
   [ROLES.ADMIN]: "Lớp trưởng",
   [ROLES.MANAGER]: "Tổ trưởng",
   [ROLES.STUDENT]: "Học sinh",
-};
-
-const DEFAULT_MANAGER_PERMISSIONS = {
-  allowAdd: false,
-  allowDelete: false,
-  allowEditName: true,
-  allowResetPin: true,
-  allowMoveGroup: false,
 };
 
 // Quyền mặc định
@@ -194,10 +188,10 @@ const DEFAULT_RULES = [
   },
 ];
 
+// CẬP NHẬT LOGIC ĐÁNH GIÁ: > 80 MỚI TỐT
 const getRating = (score) => {
-  if (score >= 80)
-    return { label: "Tốt", color: "bg-green-100 text-green-700" };
-  if (score >= 65) return { label: "Khá", color: "bg-blue-100 text-blue-700" };
+  if (score > 80) return { label: "Tốt", color: "bg-green-100 text-green-700" }; // Lớn hơn 80
+  if (score >= 65) return { label: "Khá", color: "bg-blue-100 text-blue-700" }; // 65 <= score <= 80
   if (score >= 50)
     return { label: "TB", color: "bg-yellow-100 text-yellow-700" };
   if (score >= 35)
@@ -212,7 +206,6 @@ const formatMoney = (amount) =>
 
 // --- COMPONENTS ---
 
-// 1. Change Password Modal
 const ChangePasswordModal = ({ user, onClose, onSave }) => {
   const [oldPin, setOldPin] = useState("");
   const [newPin, setNewPin] = useState("");
@@ -276,7 +269,6 @@ const ChangePasswordModal = ({ user, onClose, onSave }) => {
   );
 };
 
-// 2. User Edit Modal
 const UserEditModal = ({ targetUser, currentUser, onSave, onClose }) => {
   const [formData, setFormData] = useState({
     name: targetUser.name,
@@ -468,8 +460,10 @@ const LoginScreen = ({ dbState, onLogin }) => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-600 to-indigo-500 p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">Lớp Học Vui Vẻ</h1>
-          <p className="text-gray-500 text-sm">Năm học mới & Danh sách mới</p>
+          <h1 className="text-2xl font-bold text-gray-800">
+            Thống kê tình hình lớp 12/4
+          </h1>
+          <p className="text-gray-500 text-sm">By Nguyễn Hoàng Brush</p>
         </div>
         {!selectedUser ? (
           <>
@@ -580,7 +574,6 @@ const LoginScreen = ({ dbState, onLogin }) => {
   );
 };
 
-// 3. Account Manager (TEACHER CAN DELEGATE PERMISSIONS HERE)
 const AccountManager = ({
   users,
   updateData,
@@ -601,7 +594,6 @@ const AccountManager = ({
   const isAdmin = currentUser.role === ROLES.ADMIN;
   const isManager = currentUser.role === ROLES.MANAGER;
 
-  // Quyền hạn thực tế dựa trên cài đặt
   const canManageUsers =
     isTeacher || (isAdmin && adminPermissions.canManageUsers);
 
@@ -647,7 +639,6 @@ const AccountManager = ({
     alert("Đã thêm thành viên mới!");
   };
 
-  // Teacher toggles Admin Permissions
   const toggleAdminPermission = (key) => {
     if (!isTeacher) return;
     const newPerms = { ...adminPermissions, [key]: !adminPermissions[key] };
@@ -678,7 +669,6 @@ const AccountManager = ({
         />
       )}
 
-      {/* TEACHER-ONLY: ADMIN PERMISSIONS DELEGATION */}
       {isTeacher && (
         <div className="bg-purple-50 p-4 border-b border-purple-100">
           <h3 className="font-bold text-purple-900 mb-3 flex items-center gap-2">
@@ -865,7 +855,6 @@ const AccountManager = ({
               </div>
             </div>
             <div className="flex items-center gap-2">
-              {/* Check Permissions */}
               {canManageUsers && user.role !== ROLES.TEACHER && (
                 <>
                   <button
@@ -953,13 +942,59 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
   const activeMonthLabel =
     activeMonthId === "ALL" ? "Cả Năm" : `Tháng ${activeMonthId}`;
 
-  // STATS FOR OVERVIEW TAB
-  const overviewStats = useMemo(() => {
-    return studentList
+  // --- TÍNH TOÁN THỐNG KÊ (CẢ CÁ NHÂN VÀ TỔNG LỚP) ---
+  const stats = useMemo(() => {
+    let weekTotalClassFine = 0;
+    let monthTotalClassFine = 0;
+    let yearTotalClassFine = 0;
+
+    // Tính tổng quỹ lớp (Không bị ảnh hưởng bởi bộ lọc cá nhân)
+    const allStudents = Object.values(users).filter(
+      (u) => u.role === ROLES.STUDENT || u.role === ROLES.MANAGER
+    );
+
+    allStudents.forEach((st) => {
+      // Tổng tuần
+      const wData = getStudentData(
+        st.id,
+        activeYearId,
+        activeMonthId,
+        activeWeek
+      );
+      weekTotalClassFine += wData.fines;
+
+      // Tổng tháng
+      if (activeMonthId !== "ALL") {
+        for (let w = 1; w <= 4; w++) {
+          const mData = getStudentData(st.id, activeYearId, activeMonthId, w);
+          monthTotalClassFine += mData.fines;
+        }
+      }
+
+      // Tổng năm
+      FIXED_MONTHS.forEach((m) => {
+        for (let w = 1; w <= 4; w++) {
+          const yData = getStudentData(st.id, activeYearId, m.id, w);
+          yearTotalClassFine += yData.fines;
+        }
+      });
+    });
+
+    // Tính chi tiết từng học sinh (để hiển thị bảng)
+    const detailed = studentList
       .map((student) => {
         let currentMonthTotalScore = 0;
         let currentMonthTotalFines = 0;
         let weeklyFines = {};
+        let yearTotalFines = 0;
+
+        // Tính phạt năm cá nhân
+        FIXED_MONTHS.forEach((m) => {
+          for (let w = 1; w <= 4; w++) {
+            const data = getStudentData(student.id, activeYearId, m.id, w);
+            yearTotalFines += data.fines;
+          }
+        });
 
         if (activeMonthId === "ALL") {
           let totalScoreAllTime = 0;
@@ -992,10 +1027,18 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
           currentMonthAvg: currentMonthTotalScore / 4,
           currentMonthFines: currentMonthTotalFines,
           weeklyFines,
+          yearTotalFines,
         };
       })
       .sort((a, b) => b.currentMonthAvg - a.currentMonthAvg);
-  }, [users, weeklyData, activeMonthId, activeYearId]);
+
+    return {
+      weekTotalClassFine,
+      monthTotalClassFine,
+      yearTotalClassFine,
+      detailed,
+    };
+  }, [users, weeklyData, activeMonthId, activeYearId, activeWeek]);
 
   // CUSTOM RANGE STATS
   const rangeStats = useMemo(() => {
@@ -1024,7 +1067,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       })
       .sort((a, b) => b.rangeAvg - a.rangeAvg);
 
-    // *** PRIVACY: Student only sees themselves ***
     if (isStudent) {
       return results.filter((s) => s.id === currentUser.id);
     }
@@ -1163,13 +1205,11 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     [1, 2, 3, 4].map((groupId) => {
       let groupMembers = studentList.filter((s) => s.group === groupId);
 
-      // MANAGER FILTER
       if (isManager && currentUser.group !== groupId) return null;
 
-      // STUDENT PRIVACY: ONLY SHOW SELF
       if (isStudent) {
-        if (currentUser.group !== groupId) return null; // Nếu không phải tổ của mình thì ẩn luôn
-        groupMembers = groupMembers.filter((s) => s.id === currentUser.id); // Trong tổ mình chỉ hiện mình
+        if (currentUser.group !== groupId) return null;
+        groupMembers = groupMembers.filter((s) => s.id === currentUser.id);
       }
 
       const isExpanded = expandedGroup === groupId;
@@ -1222,7 +1262,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                       </span>
                     </div>
 
-                    {/* NÚT CHẤM ĐIỂM: CHỈ HIỆN NẾU KHÔNG PHẢI LÀ HỌC SINH */}
                     {!isStudent && (
                       <div className="grid grid-cols-1 gap-2 mt-2">
                         <div className="flex flex-wrap gap-2">
@@ -1278,7 +1317,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                                   ? `+${v.pointsAtTime}`
                                   : v.pointsAtTime}
                               </span>
-                              {/* NÚT XÓA: CHỈ HIỆN NẾU KHÔNG PHẢI HỌC SINH */}
                               {!isStudent && (
                                 <button
                                   onClick={() =>
@@ -1400,68 +1438,107 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       <main className="max-w-3xl mx-auto p-4">
         {/* TAB: TỔNG QUAN (TÀI CHÍNH) */}
         {activeTab === "overview" && (
-          <div className="fade-in bg-white rounded-xl shadow-sm overflow-hidden">
-            <div className="p-4 bg-indigo-50 border-b border-indigo-100">
-              <h2 className="font-bold text-indigo-900">
-                Tổng Kết {activeMonthLabel}
-              </h2>
+          <div className="fade-in space-y-4">
+            {/* CARD THỐNG KÊ QUỸ LỚP TOÀN BỘ */}
+            <div className="grid grid-cols-3 gap-2">
+              <div className="bg-white p-3 rounded-xl shadow-sm border border-blue-100 flex flex-col items-center justify-center text-center">
+                <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">
+                  Tuần này
+                </p>
+                <p className="text-sm font-bold text-blue-600">
+                  {formatMoney(stats.weekTotalClassFine)}
+                </p>
+              </div>
+              <div className="bg-white p-3 rounded-xl shadow-sm border border-orange-100 flex flex-col items-center justify-center text-center">
+                <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">
+                  Tháng {activeMonthId === "ALL" ? "..." : activeMonthId}
+                </p>
+                <p className="text-sm font-bold text-orange-600">
+                  {activeMonthId === "ALL"
+                    ? "-"
+                    : formatMoney(stats.monthTotalClassFine)}
+                </p>
+              </div>
+              <div className="bg-white p-3 rounded-xl shadow-sm border border-green-100 flex flex-col items-center justify-center text-center">
+                <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">
+                  Cả năm
+                </p>
+                <p className="text-sm font-bold text-green-600">
+                  {formatMoney(stats.yearTotalClassFine)}
+                </p>
+              </div>
             </div>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-gray-50 text-gray-500">
-                  <tr>
-                    <th className="p-3 min-w-[140px]">Họ tên</th>
-                    <th className="p-3 text-right">TB</th>
-                    {activeMonthId !== "ALL" &&
-                      [1, 2, 3, 4].map((t) => (
-                        <th
-                          key={t}
-                          className="p-3 text-right bg-red-50 text-red-600"
-                        >
-                          T{t}
-                        </th>
+
+            <div className="bg-white rounded-xl shadow-sm overflow-hidden">
+              <div className="p-4 bg-indigo-50 border-b border-indigo-100 flex justify-between items-center">
+                <h2 className="font-bold text-indigo-900">
+                  Chi tiết {activeMonthLabel}
+                </h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-gray-50 text-gray-500">
+                    <tr>
+                      <th className="p-3 min-w-[140px]">Họ tên</th>
+                      <th className="p-3 text-right">TB</th>
+                      {activeMonthId !== "ALL" &&
+                        [1, 2, 3, 4].map((t) => (
+                          <th
+                            key={t}
+                            className="p-3 text-right bg-red-50 text-red-600"
+                          >
+                            T{t}
+                          </th>
+                        ))}
+                      <th className="p-3 text-right font-bold text-red-700 bg-red-100">
+                        Phạt Tháng
+                      </th>
+                      <th className="p-3 text-right font-bold text-red-800 bg-red-200">
+                        Phạt Năm
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {stats.detailed
+                      .filter((s) => {
+                        if (isStudent) return s.id === currentUser.id;
+                        if (isManager) return s.group === currentUser.group;
+                        return true;
+                      })
+                      .map((s) => (
+                        <tr key={s.id} className="hover:bg-gray-50">
+                          <td className="p-3 font-medium text-gray-800">
+                            <span className="text-gray-400 text-xs mr-1">
+                              {s.stt}.
+                            </span>
+                            {s.name}
+                          </td>
+                          <td className="p-3 text-right font-bold text-indigo-600">
+                            {s.currentMonthAvg.toFixed(1)}
+                          </td>
+                          {activeMonthId !== "ALL" &&
+                            [1, 2, 3, 4].map((w) => (
+                              <td key={w} className="p-3 text-right text-xs">
+                                {s.weeklyFines[w] > 0
+                                  ? formatMoney(s.weeklyFines[w])
+                                  : "-"}
+                              </td>
+                            ))}
+                          <td className="p-3 text-right font-bold text-red-600 bg-red-50/50">
+                            {s.currentMonthFines > 0
+                              ? formatMoney(s.currentMonthFines)
+                              : "0"}
+                          </td>
+                          <td className="p-3 text-right font-bold text-red-800 bg-red-100">
+                            {s.yearTotalFines > 0
+                              ? formatMoney(s.yearTotalFines)
+                              : "0"}
+                          </td>
+                        </tr>
                       ))}
-                    <th className="p-3 text-right font-bold text-red-700 bg-red-100">
-                      Phạt
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {overviewStats
-                    .filter((s) => {
-                      // *** BẢO MẬT: HỌC SINH CHỈ THẤY MÌNH ***
-                      if (isStudent) return s.id === currentUser.id;
-                      if (isManager) return s.group === currentUser.group;
-                      return true;
-                    })
-                    .map((s) => (
-                      <tr key={s.id} className="hover:bg-gray-50">
-                        <td className="p-3 font-medium text-gray-800">
-                          <span className="text-gray-400 text-xs mr-1">
-                            {s.stt}.
-                          </span>
-                          {s.name}
-                        </td>
-                        <td className="p-3 text-right font-bold text-indigo-600">
-                          {s.currentMonthAvg.toFixed(1)}
-                        </td>
-                        {activeMonthId !== "ALL" &&
-                          [1, 2, 3, 4].map((w) => (
-                            <td key={w} className="p-3 text-right text-xs">
-                              {s.weeklyFines[w] > 0
-                                ? formatMoney(s.weeklyFines[w])
-                                : "-"}
-                            </td>
-                          ))}
-                        <td className="p-3 text-right font-bold text-red-600 bg-red-50/50">
-                          {s.currentMonthFines > 0
-                            ? formatMoney(s.currentMonthFines)
-                            : "0"}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         )}
@@ -1554,7 +1631,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
           </div>
         )}
 
-        {/* TAB: CHẤM ĐIỂM (ĐỐI VỚI HỌC SINH: XEM CHI TIẾT) */}
+        {/* TAB: CHẤM ĐIỂM */}
         {activeTab === "input" && (
           <div className="fade-in">{renderInputList()}</div>
         )}
@@ -1718,7 +1795,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
             <BarChart2 size={20} />
             <span className="text-[10px] mt-1">Thống kê</span>
           </button>
-          {/* NÚT CHẤM ĐIỂM / CHI TIẾT TUẦN */}
           <button
             onClick={() => setActiveTab("input")}
             className={`flex flex-col items-center p-2 rounded-lg ${
