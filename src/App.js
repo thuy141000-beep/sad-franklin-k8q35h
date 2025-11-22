@@ -43,8 +43,6 @@ import {
   BarChart2,
   UserCog,
   Eye,
-  Wallet, // Icon ví tiền
-  TrendingUp, // Icon biểu đồ tăng trưởng
 } from "lucide-react";
 
 // --- FIREBASE SETUP ---
@@ -77,7 +75,14 @@ const ROLE_LABELS = {
   [ROLES.STUDENT]: "Học sinh",
 };
 
-// Quyền mặc định
+const DEFAULT_MANAGER_PERMISSIONS = {
+  allowAdd: false,
+  allowDelete: false,
+  allowEditName: true,
+  allowResetPin: true,
+  allowMoveGroup: false,
+};
+
 const DEFAULT_PERMISSIONS = {
   canManageUsers: false,
   canManageRules: false,
@@ -178,20 +183,20 @@ const DEFAULT_RULES = [
     points: -30,
     type: "penalty",
   },
-  { id: "b1", label: "Điểm 8 trở lên", fine: 0, points: 10, type: "bonus" },
+  { id: "b1", label: "Điểm 8 trở lên", fine: 10000, points: 10, type: "bonus" },
   {
     id: "b2",
     label: "Phát biểu xây dựng bài",
-    fine: 0,
+    fine: 5000,
     points: 1,
     type: "bonus",
   },
 ];
 
-// CẬP NHẬT LOGIC ĐÁNH GIÁ: > 80 MỚI TỐT
+// > 80 MỚI TỐT, 80 LÀ KHÁ
 const getRating = (score) => {
-  if (score > 80) return { label: "Tốt", color: "bg-green-100 text-green-700" }; // Lớn hơn 80
-  if (score >= 65) return { label: "Khá", color: "bg-blue-100 text-blue-700" }; // 65 <= score <= 80
+  if (score > 80) return { label: "Tốt", color: "bg-green-100 text-green-700" };
+  if (score >= 65) return { label: "Khá", color: "bg-blue-100 text-blue-700" };
   if (score >= 50)
     return { label: "TB", color: "bg-yellow-100 text-yellow-700" };
   if (score >= 35)
@@ -460,10 +465,8 @@ const LoginScreen = ({ dbState, onLogin }) => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-600 to-indigo-500 p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">
-            Thống kê tình hình lớp 12/4
-          </h1>
-          <p className="text-gray-500 text-sm">By Nguyễn Hoàng Brush</p>
+          <h1 className="text-2xl font-bold text-gray-800">Lớp Học Vui Vẻ</h1>
+          <p className="text-gray-500 text-sm">Năm học mới & Danh sách mới</p>
         </div>
         {!selectedUser ? (
           <>
@@ -942,53 +945,16 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
   const activeMonthLabel =
     activeMonthId === "ALL" ? "Cả Năm" : `Tháng ${activeMonthId}`;
 
-  // --- TÍNH TOÁN THỐNG KÊ (CẢ CÁ NHÂN VÀ TỔNG LỚP) ---
-  const stats = useMemo(() => {
-    let weekTotalClassFine = 0;
-    let monthTotalClassFine = 0;
-    let yearTotalClassFine = 0;
-
-    // Tính tổng quỹ lớp (Không bị ảnh hưởng bởi bộ lọc cá nhân)
-    const allStudents = Object.values(users).filter(
-      (u) => u.role === ROLES.STUDENT || u.role === ROLES.MANAGER
-    );
-
-    allStudents.forEach((st) => {
-      // Tổng tuần
-      const wData = getStudentData(
-        st.id,
-        activeYearId,
-        activeMonthId,
-        activeWeek
-      );
-      weekTotalClassFine += wData.fines;
-
-      // Tổng tháng
-      if (activeMonthId !== "ALL") {
-        for (let w = 1; w <= 4; w++) {
-          const mData = getStudentData(st.id, activeYearId, activeMonthId, w);
-          monthTotalClassFine += mData.fines;
-        }
-      }
-
-      // Tổng năm
-      FIXED_MONTHS.forEach((m) => {
-        for (let w = 1; w <= 4; w++) {
-          const yData = getStudentData(st.id, activeYearId, m.id, w);
-          yearTotalClassFine += yData.fines;
-        }
-      });
-    });
-
-    // Tính chi tiết từng học sinh (để hiển thị bảng)
-    const detailed = studentList
+  // STATS FOR OVERVIEW TAB
+  const overviewStats = useMemo(() => {
+    return studentList
       .map((student) => {
         let currentMonthTotalScore = 0;
         let currentMonthTotalFines = 0;
         let weeklyFines = {};
         let yearTotalFines = 0;
 
-        // Tính phạt năm cá nhân
+        // Tính tổng phạt cả năm
         FIXED_MONTHS.forEach((m) => {
           for (let w = 1; w <= 4; w++) {
             const data = getStudentData(student.id, activeYearId, m.id, w);
@@ -1031,14 +997,47 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         };
       })
       .sort((a, b) => b.currentMonthAvg - a.currentMonthAvg);
+  }, [users, weeklyData, activeMonthId, activeYearId]);
 
-    return {
-      weekTotalClassFine,
-      monthTotalClassFine,
-      yearTotalClassFine,
-      detailed,
-    };
-  }, [users, weeklyData, activeMonthId, activeYearId, activeWeek]);
+  // TÍNH TỔNG QUỸ LỚP (TẤT CẢ THÀNH VIÊN)
+  const classFundStats = useMemo(() => {
+    let weekTotal = 0;
+    let monthTotal = 0;
+    let yearTotal = 0;
+
+    const allStudents = Object.values(users).filter(
+      (u) => u.role === ROLES.STUDENT || u.role === ROLES.MANAGER
+    );
+
+    allStudents.forEach((st) => {
+      // Tuần
+      weekTotal += getStudentData(
+        st.id,
+        activeYearId,
+        activeMonthId,
+        activeWeek
+      ).fines;
+
+      // Tháng
+      if (activeMonthId !== "ALL") {
+        for (let w = 1; w <= 4; w++)
+          monthTotal += getStudentData(
+            st.id,
+            activeYearId,
+            activeMonthId,
+            w
+          ).fines;
+      }
+
+      // Năm
+      FIXED_MONTHS.forEach((m) => {
+        for (let w = 1; w <= 4; w++)
+          yearTotal += getStudentData(st.id, activeYearId, m.id, w).fines;
+      });
+    });
+
+    return { weekTotal, monthTotal, yearTotal };
+  }, [users, weeklyData, activeYearId, activeMonthId, activeWeek]);
 
   // CUSTOM RANGE STATS
   const rangeStats = useMemo(() => {
@@ -1109,11 +1108,23 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       pointsAtTime: rule.points,
       timestamp: Date.now(),
       by: currentUser.name,
+      type: rule.type,
     };
+
+    // LOGIC TRỪ LUI TIỀN:
+    // - Nếu là PHẠT (penalty): CỘNG thêm vào nợ (fines tăng)
+    // - Nếu là THƯỞNG (bonus): TRỪ bớt nợ (fines giảm)
+    let fineChange = 0;
+    if (rule.type === "penalty") {
+      fineChange = rule.fine || 0;
+    } else if (rule.type === "bonus") {
+      fineChange = -(rule.fine || 0);
+    }
+
     const uD = {
       ...cD,
       score: cD.score + rule.points,
-      fines: cD.fines + (rule.fine || 0),
+      fines: cD.fines + fineChange,
       violations: [nE, ...cD.violations],
     };
     updateData({
@@ -1138,10 +1149,25 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     );
     const entry = cD.violations.find((v) => v.id === entryId);
     if (!entry) return;
+
+    // LOGIC HOÀN TÁC (Ngược lại với handleAddViolation):
+    // - Xóa lỗi PHẠT -> Giảm nợ (Trừ)
+    // - Xóa lỗi THƯỞNG -> Tăng nợ lại (Cộng)
+    let fineCorrection = 0;
+    // Check type or fallback to points logic for old data
+    if (entry.type === "penalty" || (!entry.type && entry.pointsAtTime < 0)) {
+      fineCorrection = -(entry.fineAtTime || 0);
+    } else if (
+      entry.type === "bonus" ||
+      (!entry.type && entry.pointsAtTime > 0)
+    ) {
+      fineCorrection = entry.fineAtTime || 0;
+    }
+
     const uD = {
       ...cD,
       score: cD.score - entry.pointsAtTime,
-      fines: Math.max(0, cD.fines - entry.fineAtTime),
+      fines: cD.fines + fineCorrection,
       violations: cD.violations.filter((v) => v.id !== entryId),
     };
     updateData({
@@ -1443,28 +1469,28 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
             <div className="grid grid-cols-3 gap-2">
               <div className="bg-white p-3 rounded-xl shadow-sm border border-blue-100 flex flex-col items-center justify-center text-center">
                 <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">
-                  Tuần này
+                  Tổng Phạt Tuần
                 </p>
                 <p className="text-sm font-bold text-blue-600">
-                  {formatMoney(stats.weekTotalClassFine)}
+                  {formatMoney(classFundStats.weekTotal)}
                 </p>
               </div>
               <div className="bg-white p-3 rounded-xl shadow-sm border border-orange-100 flex flex-col items-center justify-center text-center">
                 <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">
-                  Tháng {activeMonthId === "ALL" ? "..." : activeMonthId}
+                  Tổng Phạt Tháng
                 </p>
                 <p className="text-sm font-bold text-orange-600">
                   {activeMonthId === "ALL"
                     ? "-"
-                    : formatMoney(stats.monthTotalClassFine)}
+                    : formatMoney(classFundStats.monthTotal)}
                 </p>
               </div>
               <div className="bg-white p-3 rounded-xl shadow-sm border border-green-100 flex flex-col items-center justify-center text-center">
                 <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">
-                  Cả năm
+                  Tổng Phạt Năm
                 </p>
                 <p className="text-sm font-bold text-green-600">
-                  {formatMoney(stats.yearTotalClassFine)}
+                  {formatMoney(classFundStats.yearTotal)}
                 </p>
               </div>
             </div>
@@ -1499,7 +1525,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {stats.detailed
+                    {overviewStats
                       .filter((s) => {
                         if (isStudent) return s.id === currentUser.id;
                         if (isManager) return s.group === currentUser.group;
@@ -1524,15 +1550,29 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                                   : "-"}
                               </td>
                             ))}
-                          <td className="p-3 text-right font-bold text-red-600 bg-red-50/50">
-                            {s.currentMonthFines > 0
-                              ? formatMoney(s.currentMonthFines)
-                              : "0"}
+
+                          {/* LOGIC MÀU SẮC: DƯ (ÂM) MÀU XANH, NỢ (DƯƠNG) MÀU ĐỎ */}
+                          <td
+                            className={`p-3 text-right font-bold ${
+                              s.currentMonthFines > 0
+                                ? "text-red-600 bg-red-50"
+                                : s.currentMonthFines < 0
+                                ? "text-green-600 bg-green-50"
+                                : "text-gray-400"
+                            }`}
+                          >
+                            {formatMoney(s.currentMonthFines)}
                           </td>
-                          <td className="p-3 text-right font-bold text-red-800 bg-red-100">
-                            {s.yearTotalFines > 0
-                              ? formatMoney(s.yearTotalFines)
-                              : "0"}
+                          <td
+                            className={`p-3 text-right font-bold ${
+                              s.yearTotalFines > 0
+                                ? "text-red-800 bg-red-100"
+                                : s.yearTotalFines < 0
+                                ? "text-green-800 bg-green-100"
+                                : "text-gray-400"
+                            }`}
+                          >
+                            {formatMoney(s.yearTotalFines)}
                           </td>
                         </tr>
                       ))}
@@ -1619,7 +1659,15 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                         <td className="p-3 text-right font-bold text-blue-600">
                           {s.rangeAvg.toFixed(1)}
                         </td>
-                        <td className="p-3 text-right font-bold text-red-600">
+                        <td
+                          className={`p-3 text-right font-bold ${
+                            s.rangeFines > 0
+                              ? "text-red-600"
+                              : s.rangeFines < 0
+                              ? "text-green-600"
+                              : "text-gray-400"
+                          }`}
+                        >
                           {formatMoney(s.rangeFines)}
                         </td>
                       </tr>
@@ -1636,7 +1684,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
           <div className="fade-in">{renderInputList()}</div>
         )}
 
-        {/* TAB: QUẢN LÝ NỘI QUY - TẤT CẢ ĐỀU XEM ĐƯỢC */}
+        {/* TAB: QUẢN LÝ NỘI QUY */}
         {activeTab === "rules" && (
           <div className="bg-white rounded-xl shadow-sm p-4 fade-in">
             <div className="flex justify-between items-center mb-4">
@@ -1672,11 +1720,12 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                     <p className="text-sm font-medium">{r.label}</p>
                     <p
                       className={`text-xs font-bold ${
-                        r.points > 0 ? "text-green-600" : "text-red-500"
+                        r.type === "bonus" ? "text-green-600" : "text-red-600"
                       }`}
                     >
                       {r.points > 0 ? "+" : ""}
-                      {r.points}đ | Phạt: {formatMoney(r.fine || 0)}
+                      {r.points}đ | {r.type === "bonus" ? "Thưởng" : "Phạt"}:{" "}
+                      {formatMoney(r.fine || 0)}
                     </p>
                   </div>
                   {canManageRules && (
@@ -1737,7 +1786,9 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                   />
                   <input
                     type="number"
-                    placeholder="Tiền phạt"
+                    placeholder={
+                      newRule.type === "bonus" ? "Tiền thưởng" : "Tiền phạt"
+                    }
                     className="w-1/4 p-2 border rounded text-sm"
                     value={newRule.fine}
                     onChange={(e) =>
