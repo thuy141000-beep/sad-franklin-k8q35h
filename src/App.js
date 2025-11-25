@@ -830,8 +830,10 @@ const LoginScreen = ({ dbState, onLogin }) => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-600 to-indigo-500 p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">Lớp Học Vui Vẻ</h1>
-          <p className="text-gray-500 text-sm">Năm học mới & Danh sách mới</p>
+          <h1 className="text-2xl font-bold text-gray-800">
+            Thống Kê Tình Hình Lớp 12/4
+          </h1>
+          <p className="text-gray-500 text-sm">By Củ Cải Muối</p>
         </div>
         {!selectedUser ? (
           <>
