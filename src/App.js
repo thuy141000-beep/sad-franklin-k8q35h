@@ -68,7 +68,7 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = "lop12-4-2025";
-const DATA_VERSION = "classData_v13"; // Giữ nguyên dữ liệu cũ
+const DATA_VERSION = "classData_v13";
 
 // --- CONSTANTS ---
 const ROLES = {
@@ -91,6 +91,8 @@ const DEFAULT_MANAGER_PERMISSIONS = {
   allowEditName: true,
   allowResetPin: true,
   allowMoveGroup: false,
+  allowBulkActions: false, // Quyền chọn nhiều
+  allowCustomMode: false, // Quyền tùy chỉnh điểm
 };
 
 const DEFAULT_PERMISSIONS = {
@@ -828,10 +830,8 @@ const LoginScreen = ({ dbState, onLogin }) => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-600 to-indigo-500 p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">
-            Thống Kê Tình Hình Lớp 12/4
-          </h1>
-          <p className="text-gray-500 text-sm">By Củ Cải Muối</p>
+          <h1 className="text-2xl font-bold text-gray-800">Lớp Học Vui Vẻ</h1>
+          <p className="text-gray-500 text-sm">Năm học mới & Danh sách mới</p>
         </div>
         {!selectedUser ? (
           <>
@@ -947,6 +947,7 @@ const AccountManager = ({
   updateData,
   currentUser,
   adminPermissions,
+  managerPermissions, // Nhận props này
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [editingUser, setEditingUser] = useState(null);
@@ -1022,6 +1023,12 @@ const AccountManager = ({
     updateData({ adminPermissions: newPerms });
   };
 
+  const toggleManagerPermission = (key) => {
+    if (!isTeacher) return;
+    const newPerms = { ...managerPermissions, [key]: !managerPermissions[key] };
+    updateData({ managerPermissions: newPerms });
+  };
+
   const displayedUsers = Object.values(users)
     .filter((u) => {
       if (!u.name.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -1049,63 +1056,179 @@ const AccountManager = ({
       {isTeacher && (
         <div className="bg-purple-50 p-4 border-b border-purple-100">
           <h3 className="font-bold text-purple-900 mb-3 flex items-center gap-2">
-            <Settings size={18} /> Cấu hình quyền Lớp trưởng (Admin)
+            <Settings size={18} /> Cấu hình quyền hạn
           </h3>
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between bg-white p-2 rounded border border-purple-100">
-              <span className="text-sm text-gray-700">
-                Quản lý thành viên (Thêm/Xóa/Sửa/Chức vụ)
-              </span>
-              <button
-                onClick={() => toggleAdminPermission("canManageUsers")}
-                className={
-                  adminPermissions.canManageUsers
-                    ? "text-green-600"
-                    : "text-gray-400"
-                }
-              >
-                {adminPermissions.canManageUsers ? (
-                  <ToggleRight size={28} />
-                ) : (
-                  <ToggleLeft size={28} />
-                )}
-              </button>
+
+          {/* ADMIN CONFIG */}
+          <div className="mb-4">
+            <h4 className="text-xs font-bold text-purple-700 uppercase mb-2">
+              Quyền Lớp Trưởng (Admin)
+            </h4>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-purple-100">
+                <span className="text-sm text-gray-700">
+                  Quản lý thành viên
+                </span>
+                <button
+                  onClick={() => toggleAdminPermission("canManageUsers")}
+                  className={
+                    adminPermissions.canManageUsers
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {adminPermissions.canManageUsers ? (
+                    <ToggleRight size={28} />
+                  ) : (
+                    <ToggleLeft size={28} />
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-purple-100">
+                <span className="text-sm text-gray-700">Sửa Nội quy</span>
+                <button
+                  onClick={() => toggleAdminPermission("canManageRules")}
+                  className={
+                    adminPermissions.canManageRules
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {adminPermissions.canManageRules ? (
+                    <ToggleRight size={28} />
+                  ) : (
+                    <ToggleLeft size={28} />
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-purple-100">
+                <span className="text-sm text-gray-700">Đổi PIN</span>
+                <button
+                  onClick={() => toggleAdminPermission("canResetPin")}
+                  className={
+                    adminPermissions.canResetPin
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {adminPermissions.canResetPin ? (
+                    <ToggleRight size={28} />
+                  ) : (
+                    <ToggleLeft size={28} />
+                  )}
+                </button>
+              </div>
             </div>
-            <div className="flex items-center justify-between bg-white p-2 rounded border border-purple-100">
-              <span className="text-sm text-gray-700">Chỉnh sửa Nội quy</span>
-              <button
-                onClick={() => toggleAdminPermission("canManageRules")}
-                className={
-                  adminPermissions.canManageRules
-                    ? "text-green-600"
-                    : "text-gray-400"
-                }
-              >
-                {adminPermissions.canManageRules ? (
-                  <ToggleRight size={28} />
-                ) : (
-                  <ToggleLeft size={28} />
-                )}
-              </button>
-            </div>
-            <div className="flex items-center justify-between bg-white p-2 rounded border border-purple-100">
-              <span className="text-sm text-gray-700">
-                Đổi mã PIN thành viên
-              </span>
-              <button
-                onClick={() => toggleAdminPermission("canResetPin")}
-                className={
-                  adminPermissions.canResetPin
-                    ? "text-green-600"
-                    : "text-gray-400"
-                }
-              >
-                {adminPermissions.canResetPin ? (
-                  <ToggleRight size={28} />
-                ) : (
-                  <ToggleLeft size={28} />
-                )}
-              </button>
+          </div>
+
+          {/* MANAGER CONFIG (NEW) */}
+          <div>
+            <h4 className="text-xs font-bold text-blue-700 uppercase mb-2">
+              Quyền Tổ Trưởng (Manager)
+            </h4>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100">
+                <span className="text-xs text-gray-700">Thêm HS</span>
+                <button
+                  onClick={() => toggleManagerPermission("allowAdd")}
+                  className={
+                    managerPermissions.allowAdd
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {managerPermissions.allowAdd ? (
+                    <ToggleRight size={24} />
+                  ) : (
+                    <ToggleLeft size={24} />
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100">
+                <span className="text-xs text-gray-700">Xóa HS</span>
+                <button
+                  onClick={() => toggleManagerPermission("allowDelete")}
+                  className={
+                    managerPermissions.allowDelete
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {managerPermissions.allowDelete ? (
+                    <ToggleRight size={24} />
+                  ) : (
+                    <ToggleLeft size={24} />
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100">
+                <span className="text-xs text-gray-700">Sửa tên</span>
+                <button
+                  onClick={() => toggleManagerPermission("allowEditName")}
+                  className={
+                    managerPermissions.allowEditName
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {managerPermissions.allowEditName ? (
+                    <ToggleRight size={24} />
+                  ) : (
+                    <ToggleLeft size={24} />
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100">
+                <span className="text-xs text-gray-700">Đổi PIN</span>
+                <button
+                  onClick={() => toggleManagerPermission("allowResetPin")}
+                  className={
+                    managerPermissions.allowResetPin
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {managerPermissions.allowResetPin ? (
+                    <ToggleRight size={24} />
+                  ) : (
+                    <ToggleLeft size={24} />
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100">
+                <span className="text-xs text-gray-700">Chọn nhiều</span>
+                <button
+                  onClick={() => toggleManagerPermission("allowBulkActions")}
+                  className={
+                    managerPermissions.allowBulkActions
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {managerPermissions.allowBulkActions ? (
+                    <ToggleRight size={24} />
+                  ) : (
+                    <ToggleLeft size={24} />
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100">
+                <span className="text-xs text-gray-700">Tùy chỉnh điểm</span>
+                <button
+                  onClick={() => toggleManagerPermission("allowCustomMode")}
+                  className={
+                    managerPermissions.allowCustomMode
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {managerPermissions.allowCustomMode ? (
+                    <ToggleRight size={24} />
+                  ) : (
+                    <ToggleLeft size={24} />
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1287,7 +1410,9 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     weeklyData,
     rules,
     years = [],
+    months = [],
     adminPermissions,
+    managerPermissions = DEFAULT_MANAGER_PERMISSIONS,
     notices = [],
   } = dbState;
 
@@ -1344,18 +1469,23 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     isTeacher || (isAdmin && adminPermissions.canManageRules);
   const canEditMonths = isTeacher || isAdmin;
 
-  // Lock Logic based on YEAR specific data
-  // Khóa tháng theo từng NĂM RIÊNG BIỆT
-  const currentYearObj = years.find((y) => y.id === activeYearId) || {
-    lockedMonths: [],
-  };
-  const isMonthLocked =
-    currentYearObj.lockedMonths?.includes(activeMonthId) || false;
+  // === CHECK MANAGER PERMISSIONS HERE ===
+  // Logic: Teacher/Admin always true. Manager depends on setting. Student always false.
+  const canUseBulk =
+    isTeacher || isAdmin || (isManager && managerPermissions.allowBulkActions);
+  const canUseCustom =
+    isTeacher || isAdmin || (isManager && managerPermissions.allowCustomMode);
 
-  const safeMonths = FIXED_MONTHS.map((m) => ({
-    ...m,
-    isLocked: currentYearObj.lockedMonths?.includes(m.id) || false,
-  }));
+  const safeMonths =
+    months.length > 0
+      ? months
+      : Array.from({ length: 12 }, (_, i) => ({
+          id: i + 1,
+          name: `Tháng ${i + 1}`,
+          isLocked: false,
+        }));
+  const currentMonthObj = safeMonths.find((m) => m.id === activeMonthId);
+  const isMonthLocked = currentMonthObj?.isLocked || false;
 
   const getKey = (year, month, week) => `y${year}_m${month}_w${week}`;
   const getStudentData = (userId, year, month, week) =>
@@ -1372,6 +1502,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       ? "Cả Năm"
       : safeMonths.find((m) => m.id === activeMonthId)?.name || "Tháng ?";
 
+  // ... (Giữ nguyên các hàm tính toán thống kê cũ) ...
   // --- STATS CALCULATION ---
   const classFundStats = useMemo(() => {
     let weekTotal = 0;
@@ -1414,14 +1545,12 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         let yearTotalFines = 0;
         const debtCarryOver = student.debtCarryOver || 0;
         yearTotalFines += debtCarryOver;
-
         safeMonths.forEach((m) => {
           for (let w = 1; w <= 4; w++) {
             const data = getStudentData(student.id, activeYearId, m.id, w);
             yearTotalFines += data.fines;
           }
         });
-
         if (activeMonthId === "ALL") {
           let totalScoreAllTime = 0;
           let totalWeeks = 0;
@@ -2561,19 +2690,22 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
             {!isStudent && !isMonthLocked && (
               <div className="flex justify-between items-center mb-2 px-2">
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      setSelectionMode(!selectionMode);
-                      setSelectedViolationKeys([]);
-                    }}
-                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold shadow-sm border transition-all ${
-                      selectionMode
-                        ? "bg-indigo-600 text-white"
-                        : "bg-white text-gray-600"
-                    }`}
-                  >
-                    <CheckSquare size={14} /> Chọn nhiều
-                  </button>
+                  {/* NÚT CHỌN NHIỀU - CHECK QUYỀN */}
+                  {canUseBulk && (
+                    <button
+                      onClick={() => {
+                        setSelectionMode(!selectionMode);
+                        setSelectedViolationKeys([]);
+                      }}
+                      className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold shadow-sm border transition-all ${
+                        selectionMode
+                          ? "bg-indigo-600 text-white"
+                          : "bg-white text-gray-600"
+                      }`}
+                    >
+                      <CheckSquare size={14} /> Chọn nhiều
+                    </button>
+                  )}
                   {selectionMode && selectedViolationKeys.length > 0 && (
                     <button
                       onClick={() => setBulkEditModalOpen(true)}
@@ -2584,8 +2716,8 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                   )}
                 </div>
 
-                {/* Nút chế độ tùy chỉnh cũ (nếu cần) */}
-                {!selectionMode && (
+                {/* NÚT TÙY CHỈNH - CHECK QUYỀN */}
+                {!selectionMode && canUseCustom && (
                   <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-full shadow-sm border border-gray-200">
                     <span className="text-xs font-bold text-gray-600">
                       Tùy chỉnh
@@ -2829,6 +2961,9 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
             updateData={updateData}
             currentUser={currentUser}
             adminPermissions={adminPermissions || DEFAULT_PERMISSIONS}
+            managerPermissions={
+              managerPermissions || DEFAULT_MANAGER_PERMISSIONS
+            }
           />
         )}
       </main>
