@@ -44,11 +44,14 @@ import {
   BarChart2,
   UserCog,
   Eye,
-  Wallet,
-  TrendingUp,
+  CheckSquare,
+  Square,
   ArrowRightCircle,
-  SlidersHorizontal,
-  CheckSquare, // Icon chọn tháng
+  ListChecks,
+  Bell,
+  MessageSquare,
+  Send,
+  Megaphone, // <-- ĐÃ BỔ SUNG ICON NÀY ĐỂ SỬA LỖI
 } from "lucide-react";
 
 // --- FIREBASE SETUP ---
@@ -65,6 +68,7 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = "lop12-4-2025";
+const DATA_VERSION = "classData_v13"; // Giữ nguyên dữ liệu cũ
 
 // --- CONSTANTS ---
 const ROLES = {
@@ -81,7 +85,14 @@ const ROLE_LABELS = {
   [ROLES.STUDENT]: "Học sinh",
 };
 
-// Quyền mặc định
+const DEFAULT_MANAGER_PERMISSIONS = {
+  allowAdd: false,
+  allowDelete: false,
+  allowEditName: true,
+  allowResetPin: true,
+  allowMoveGroup: false,
+};
+
 const DEFAULT_PERMISSIONS = {
   canManageUsers: false,
   canManageRules: false,
@@ -208,9 +219,236 @@ const formatMoney = (amount) =>
     amount
   );
 
+const formatDate = (timestamp) => {
+  if (!timestamp) return "";
+  const date = new Date(timestamp);
+  return date.toLocaleDateString("vi-VN", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
 // --- COMPONENTS ---
 
-// 1. Custom Rule Modal (Tùy chỉnh điểm/tiền cho 1 lần phạt)
+// 1. Notice Board Component
+const NoticeBoard = ({ notices, currentUser, onSave, onDelete }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [formData, setFormData] = useState({ title: "", content: "" });
+
+  const canPost =
+    currentUser.role === ROLES.TEACHER ||
+    currentUser.role === ROLES.ADMIN ||
+    currentUser.canPostNotices;
+
+  const handleSubmit = () => {
+    if (!formData.title || !formData.content)
+      return alert("Vui lòng nhập đủ tiêu đề và nội dung!");
+
+    const newNotice = {
+      id: editingId || Date.now(),
+      title: formData.title,
+      content: formData.content,
+      date: Date.now(),
+      author: currentUser.name,
+      role: currentUser.role,
+    };
+
+    onSave(newNotice);
+    setIsEditing(false);
+    setEditingId(null);
+    setFormData({ title: "", content: "" });
+  };
+
+  const handleEdit = (notice) => {
+    setEditingId(notice.id);
+    setFormData({ title: notice.title, content: notice.content });
+    setIsEditing(true);
+  };
+
+  const handleDelete = (id) => {
+    if (confirm("Bạn có chắc muốn xóa thông báo này?")) {
+      onDelete(id);
+    }
+  };
+
+  return (
+    <div className="fade-in space-y-4">
+      {canPost && (
+        <div className="bg-white rounded-xl shadow-sm p-4 border border-indigo-100">
+          {!isEditing ? (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="w-full py-3 bg-indigo-50 text-indigo-600 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-indigo-100 transition-colors"
+            >
+              <Plus size={20} /> Tạo thông báo mới
+            </button>
+          ) : (
+            <div className="space-y-3 animate-slideDown">
+              <h3 className="font-bold text-gray-800">
+                {editingId ? "Chỉnh sửa thông báo" : "Thông báo mới"}
+              </h3>
+              <input
+                className="w-full p-2 border rounded text-sm font-bold"
+                placeholder="Tiêu đề (Ví dụ: Lịch nghỉ học, Nộp quỹ...)"
+                value={formData.title}
+                onChange={(e) =>
+                  setFormData({ ...formData, title: e.target.value })
+                }
+                autoFocus
+              />
+              <textarea
+                className="w-full p-2 border rounded text-sm h-24"
+                placeholder="Nội dung chi tiết..."
+                value={formData.content}
+                onChange={(e) =>
+                  setFormData({ ...formData, content: e.target.value })
+                }
+              />
+              <div className="flex gap-2 justify-end">
+                <button
+                  onClick={() => {
+                    setIsEditing(false);
+                    setEditingId(null);
+                    setFormData({ title: "", content: "" });
+                  }}
+                  className="px-4 py-2 bg-gray-100 text-gray-600 rounded text-sm font-bold"
+                >
+                  Hủy
+                </button>
+                <button
+                  onClick={handleSubmit}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded text-sm font-bold flex items-center gap-1"
+                >
+                  <Send size={14} /> Đăng
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="space-y-3">
+        {notices && notices.length > 0 ? (
+          notices
+            .sort((a, b) => b.date - a.date)
+            .map((notice) => (
+              <div
+                key={notice.id}
+                className="bg-white rounded-xl shadow-sm p-4 border-l-4 border-indigo-500 relative group"
+              >
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <h4 className="font-bold text-gray-800 text-lg">
+                      {notice.title}
+                    </h4>
+                    <p className="text-xs text-gray-400 flex items-center gap-1">
+                      {formatDate(notice.date)} •
+                      <span
+                        className={`font-bold ${
+                          notice.role === ROLES.TEACHER
+                            ? "text-purple-600"
+                            : "text-blue-600"
+                        }`}
+                      >
+                        {notice.author}
+                      </span>
+                    </p>
+                  </div>
+                  {canPost && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => handleEdit(notice)}
+                        className="text-gray-400 hover:text-blue-600"
+                      >
+                        <Edit3 size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(notice.id)}
+                        className="text-gray-400 hover:text-red-600"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <p className="text-gray-600 text-sm whitespace-pre-wrap leading-relaxed">
+                  {notice.content}
+                </p>
+              </div>
+            ))
+        ) : (
+          <div className="text-center py-10 text-gray-400">
+            <MessageSquare size={40} className="mx-auto mb-2 opacity-20" />
+            <p>Chưa có thông báo nào</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const BulkEditModal = ({ count, onClose, onConfirm, onDelete }) => {
+  const [points, setPoints] = useState(0);
+  const [fine, setFine] = useState(0);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-xs animate-slideDown">
+        <h3 className="font-bold text-indigo-900 mb-2">
+          Sửa {count} lỗi đang chọn
+        </h3>
+        <div className="space-y-3 mb-4">
+          <div>
+            <label className="text-xs font-bold text-gray-600">
+              Điểm mới (+/-)
+            </label>
+            <input
+              type="number"
+              className="w-full p-2 border rounded"
+              value={points}
+              onChange={(e) => setPoints(Number(e.target.value))}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-gray-600">
+              Tiền phạt mới (VNĐ)
+            </label>
+            <input
+              type="number"
+              className="w-full p-2 border rounded"
+              value={fine}
+              onChange={(e) => setFine(Number(e.target.value))}
+            />
+          </div>
+        </div>
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={() => onConfirm(points, fine)}
+            className="py-2 bg-indigo-600 text-white rounded font-bold shadow-md"
+          >
+            Cập nhật tất cả
+          </button>
+          <button
+            onClick={onDelete}
+            className="py-2 bg-red-100 text-red-600 rounded font-bold"
+          >
+            Xóa tất cả
+          </button>
+          <button
+            onClick={onClose}
+            className="py-2 bg-gray-100 text-gray-600 rounded font-bold"
+          >
+            Hủy
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const CustomRuleModal = ({ rule, onClose, onConfirm }) => {
   const [customPoints, setCustomPoints] = useState(rule.points);
   const [customFine, setCustomFine] = useState(rule.fine);
@@ -221,9 +459,6 @@ const CustomRuleModal = ({ rule, onClose, onConfirm }) => {
         <h3 className="font-bold text-gray-800 mb-2">
           Tùy chỉnh: {rule.label}
         </h3>
-        <p className="text-xs text-gray-500 mb-4">
-          Thay đổi điểm/tiền cho lần phạt này
-        </p>
         <div className="space-y-3">
           <div>
             <label className="text-xs font-bold text-gray-600">
@@ -267,31 +502,28 @@ const CustomRuleModal = ({ rule, onClose, onConfirm }) => {
   );
 };
 
-// 2. Batch Update Modal (Áp dụng sửa đổi cho dữ liệu cũ)
-const BatchUpdateModal = ({ months, onConfirm, onClose }) => {
+const BatchUpdateModal = ({ months, onConfirm, onClose, isBulk }) => {
   const [selectedMonths, setSelectedMonths] = useState([]);
-
-  const toggleMonth = (id) => {
+  const toggleMonth = (id) =>
     setSelectedMonths((prev) =>
       prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]
     );
-  };
-
-  const toggleAll = () => {
-    if (selectedMonths.length === months.length) setSelectedMonths([]);
-    else setSelectedMonths(months.map((m) => m.id));
-  };
+  const toggleAll = () =>
+    selectedMonths.length === months.length
+      ? setSelectedMonths([])
+      : setSelectedMonths(months.map((m) => m.id));
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm animate-slideDown">
-        <h3 className="font-bold text-indigo-900 mb-2">Cập nhật dữ liệu cũ?</h3>
+        <h3 className="font-bold text-indigo-900 mb-2">
+          {isBulk ? "Đồng bộ tất cả thay đổi?" : "Cập nhật đồng bộ?"}
+        </h3>
         <p className="text-sm text-gray-600 mb-4">
-          Bạn vừa thay đổi nội quy. Bạn có muốn áp dụng mức điểm/phạt mới này
-          cho các vi phạm đã ghi nhận trước đó không?
+          Bạn vừa sửa {isBulk ? "danh sách" : "nội quy"}. Chọn các tháng bạn
+          muốn áp dụng mức phạt mới này cho các lỗi cũ:
         </p>
-
-        <div className="mb-4 max-h-60 overflow-y-auto border rounded p-2">
+        <div className="mb-4 max-h-60 overflow-y-auto border rounded p-2 bg-gray-50">
           <div className="flex items-center gap-2 mb-2 border-b pb-2">
             <input
               type="checkbox"
@@ -299,11 +531,14 @@ const BatchUpdateModal = ({ months, onConfirm, onClose }) => {
               onChange={toggleAll}
               className="w-4 h-4"
             />
-            <span className="font-bold text-sm">Chọn tất cả các tháng</span>
+            <span className="font-bold text-sm">Chọn tất cả</span>
           </div>
           <div className="grid grid-cols-3 gap-2">
             {months.map((m) => (
-              <div key={m.id} className="flex items-center gap-1">
+              <label
+                key={m.id}
+                className="flex items-center gap-1 cursor-pointer hover:bg-gray-200 p-1 rounded"
+              >
                 <input
                   type="checkbox"
                   checked={selectedMonths.includes(m.id)}
@@ -311,17 +546,16 @@ const BatchUpdateModal = ({ months, onConfirm, onClose }) => {
                   className="w-3 h-3"
                 />
                 <span className="text-xs">{m.name}</span>
-              </div>
+              </label>
             ))}
           </div>
         </div>
-
         <div className="flex gap-2">
           <button
             onClick={() => onConfirm([])}
             className="flex-1 py-2 bg-gray-100 text-gray-600 rounded text-xs font-bold"
           >
-            Không, chỉ lưu mới
+            Không đồng bộ
           </button>
           <button
             onClick={() => onConfirm(selectedMonths)}
@@ -330,7 +564,7 @@ const BatchUpdateModal = ({ months, onConfirm, onClose }) => {
             }`}
             disabled={selectedMonths.length === 0}
           >
-            Cập nhật
+            Đồng bộ ngay
           </button>
         </div>
       </div>
@@ -343,7 +577,6 @@ const ChangePasswordModal = ({ user, onClose, onSave }) => {
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [error, setError] = useState("");
-
   const handleSubmit = () => {
     if (oldPin !== user.pin) return setError("Mã PIN cũ không đúng");
     if (newPin.length < 4)
@@ -351,7 +584,6 @@ const ChangePasswordModal = ({ user, onClose, onSave }) => {
     if (newPin !== confirmPin) return setError("Xác nhận mã PIN không khớp");
     onSave(newPin);
   };
-
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
@@ -408,19 +640,16 @@ const UserEditModal = ({ targetUser, currentUser, onSave, onClose }) => {
     group: targetUser.group,
     role: targetUser.role,
   });
-
   const isTeacher = currentUser.role === ROLES.TEACHER;
   const canEditRole =
     isTeacher ||
     (currentUser.role === ROLES.ADMIN && targetUser.role !== ROLES.TEACHER);
-
   const availableRoles = [
     ROLES.STUDENT,
     ROLES.MANAGER,
     ROLES.ADMIN,
     ...(isTeacher ? [ROLES.TEACHER] : []),
   ];
-
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
@@ -515,18 +744,15 @@ const LoginScreen = ({ dbState, onLogin }) => {
   const [error, setError] = useState("");
   const [searchStudent, setSearchStudent] = useState("");
 
-  const getSortedList = (roleFilter) => {
-    return Object.values(dbState.users)
+  const getSortedList = (roleFilter) =>
+    Object.values(dbState.users)
       .filter((u) => u.role === roleFilter)
       .sort((a, b) => (a.stt || 999) - (b.stt || 999));
-  };
-
   const admins = Object.values(dbState.users).filter(
     (u) => u.role === ROLES.TEACHER || u.role === ROLES.ADMIN
   );
   const managers = getSortedList(ROLES.MANAGER);
   const students = getSortedList(ROLES.STUDENT);
-
   const handleLogin = () => {
     if (selectedUser && pin === selectedUser.pin) onLogin(selectedUser);
     else setError("Mã PIN không chính xác");
@@ -592,10 +818,8 @@ const LoginScreen = ({ dbState, onLogin }) => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-600 to-indigo-500 p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">
-            Thống kê tình hình lớp 12/4
-          </h1>
-          <p className="text-gray-500 text-sm">By Củ Cải Muối</p>
+          <h1 className="text-2xl font-bold text-gray-800">Lớp Học Vui Vẻ</h1>
+          <p className="text-gray-500 text-sm">Năm học mới & Danh sách mới</p>
         </div>
         {!selectedUser ? (
           <>
@@ -725,7 +949,6 @@ const AccountManager = ({
   const isTeacher = currentUser.role === ROLES.TEACHER;
   const isAdmin = currentUser.role === ROLES.ADMIN;
   const isManager = currentUser.role === ROLES.MANAGER;
-
   const canManageUsers =
     isTeacher || (isAdmin && adminPermissions.canManageUsers);
 
@@ -769,6 +992,15 @@ const AccountManager = ({
     setIsAdding(false);
     setNewUser({ name: "", stt: "", group: 1, role: ROLES.STUDENT });
     alert("Đã thêm thành viên mới!");
+  };
+
+  const toggleUserNoticePermission = (userId) => {
+    if (!isTeacher) return;
+    const user = users[userId];
+    const newStatus = !user.canPostNotices;
+    updateData({
+      users: { ...users, [userId]: { ...user, canPostNotices: newStatus } },
+    });
   };
 
   const toggleAdminPermission = (key) => {
@@ -987,6 +1219,19 @@ const AccountManager = ({
               </div>
             </div>
             <div className="flex items-center gap-2">
+              {isTeacher && user.role === ROLES.STUDENT && (
+                <button
+                  onClick={() => toggleUserNoticePermission(user.id)}
+                  className={`p-1.5 rounded ${
+                    user.canPostNotices
+                      ? "text-blue-600 bg-blue-50"
+                      : "text-gray-300 hover:bg-gray-100"
+                  }`}
+                  title="Cấp quyền Thông báo"
+                >
+                  <Megaphone size={16} />
+                </button>
+              )}
               {canManageUsers && user.role !== ROLES.TEACHER && (
                 <>
                   <button
@@ -1031,6 +1276,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     years = [],
     months = [],
     adminPermissions,
+    notices = [],
   } = dbState;
 
   const [activeYearId, setActiveYearId] = useState(
@@ -1049,8 +1295,18 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
   const [selectedStudentForCustom, setSelectedStudentForCustom] =
     useState(null);
 
-  const [batchUpdateModalOpen, setBatchUpdateModalOpen] = useState(false); // State modal batch
-  const [pendingRuleUpdate, setPendingRuleUpdate] = useState(null); // Lưu rule đang chờ update
+  const [batchUpdateModalOpen, setBatchUpdateModalOpen] = useState(false);
+  const [pendingRuleUpdate, setPendingRuleUpdate] = useState(null);
+  const [pendingBulkRulesUpdate, setPendingBulkRulesUpdate] = useState(null);
+
+  // --- BULK SELECT STATE ---
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedViolationKeys, setSelectedViolationKeys] = useState([]);
+  const [bulkEditModalOpen, setBulkEditModalOpen] = useState(false);
+
+  // --- BULK RULES STATE ---
+  const [isBulkRulesMode, setIsBulkRulesMode] = useState(false);
+  const [tempRules, setTempRules] = useState([]);
 
   const [startMonth, setStartMonth] = useState(1);
   const [endMonth, setEndMonth] = useState(1);
@@ -1088,18 +1344,15 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
   const isMonthLocked = currentMonthObj?.isLocked || false;
 
   const getKey = (year, month, week) => `y${year}_m${month}_w${week}`;
-
   const getStudentData = (userId, year, month, week) =>
     weeklyData[getKey(year, month, week)]?.[userId] || {
       score: 80,
       fines: 0,
       violations: [],
     };
-
   const studentList = Object.values(users)
     .filter((u) => u.role === ROLES.STUDENT || u.role === ROLES.MANAGER)
     .sort((a, b) => a.stt - b.stt);
-
   const activeMonthLabel =
     activeMonthId === "ALL"
       ? "Cả Năm"
@@ -1110,11 +1363,9 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     let weekTotal = 0;
     let monthTotal = 0;
     let yearTotal = 0;
-
     const allStudents = Object.values(users).filter(
       (u) => u.role === ROLES.STUDENT || u.role === ROLES.MANAGER
     );
-
     allStudents.forEach((st) => {
       weekTotal += getStudentData(
         st.id,
@@ -1122,7 +1373,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         activeMonthId,
         activeWeek
       ).fines;
-
       if (activeMonthId !== "ALL") {
         for (let w = 1; w <= 4; w++)
           monthTotal += getStudentData(
@@ -1132,13 +1382,11 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
             w
           ).fines;
       }
-
       safeMonths.forEach((m) => {
         for (let w = 1; w <= 4; w++)
           yearTotal += getStudentData(st.id, activeYearId, m.id, w).fines;
       });
     });
-
     return { weekTotal, monthTotal, yearTotal };
   }, [users, weeklyData, activeYearId, activeMonthId, activeWeek, safeMonths]);
 
@@ -1204,11 +1452,9 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         let totalScore = 0;
         let totalFines = 0;
         let weeksCount = 0;
-
         let currentY = startYear;
         let currentM = startMonth;
         const endValue = endYear * 100 + endMonth;
-
         while (currentY * 100 + currentM <= endValue) {
           for (let w = 1; w <= 4; w++) {
             const data = getStudentData(student.id, currentY, currentM, w);
@@ -1222,12 +1468,10 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
             currentY++;
           }
         }
-
         const avgScore = weeksCount > 0 ? totalScore / weeksCount : 80;
         return { ...student, rangeAvg: avgScore, rangeFines: totalFines };
       })
       .sort((a, b) => b.rangeAvg - a.rangeAvg);
-
     if (isStudent) return results.filter((s) => s.id === currentUser.id);
     return results;
   }, [
@@ -1241,8 +1485,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     currentUser.id,
   ]);
 
-  // --- ACTIONS ---
-
   const handleChangeSelfPassword = (newPin) => {
     const updatedUsers = {
       ...users,
@@ -1253,7 +1495,23 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     alert("Đổi mật khẩu thành công!");
   };
 
+  // --- NOTICE ACTIONS ---
+  const handleAddNotice = (newNotice) => {
+    updateData({ notices: [newNotice, ...notices] });
+  };
+  const handleEditNotice = (noticeId, updatedNotice) => {
+    const newNotices = notices.map((n) =>
+      n.id === noticeId ? { ...n, ...updatedNotice } : n
+    );
+    updateData({ notices: newNotices });
+  };
+  const handleDeleteNotice = (noticeId) => {
+    const newNotices = notices.filter((n) => n.id !== noticeId);
+    updateData({ notices: newNotices });
+  };
+
   const handleRuleClick = (studentId, rule) => {
+    if (selectionMode) return;
     if (customMode) {
       setSelectedStudentForCustom(studentId);
       setSelectedRuleForCustom(rule);
@@ -1262,7 +1520,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       handleAddViolation(studentId, rule, rule.points, rule.fine);
     }
   };
-
   const handleCustomConfirm = (points, fine) => {
     if (selectedStudentForCustom && selectedRuleForCustom) {
       handleAddViolation(
@@ -1276,7 +1533,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       setSelectedStudentForCustom(null);
     }
   };
-
   const handleAddViolation = (targetId, rule, points, fine) => {
     if (isStudent || isMonthLocked) return;
     const cD = getStudentData(
@@ -1295,14 +1551,12 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       by: currentUser.name,
       type: rule.type,
     };
-
     let fineChange = 0;
     if (rule.type === "penalty") {
       fineChange = fine || 0;
     } else if (rule.type === "bonus") {
       fineChange = -(fine || 0);
     }
-
     const uD = {
       ...cD,
       score: cD.score + points,
@@ -1320,7 +1574,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       },
     });
   };
-
   const handleRemoveViolation = (targetId, entryId) => {
     if (isStudent || isMonthLocked) return;
     const cD = getStudentData(
@@ -1331,7 +1584,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     );
     const entry = cD.violations.find((v) => v.id === entryId);
     if (!entry) return;
-
     let fineCorrection = 0;
     if (entry.type === "penalty" || (!entry.type && entry.pointsAtTime < 0)) {
       fineCorrection = -(entry.fineAtTime || 0);
@@ -1341,7 +1593,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     ) {
       fineCorrection = entry.fineAtTime || 0;
     }
-
     const uD = {
       ...cD,
       score: cD.score - entry.pointsAtTime,
@@ -1364,11 +1615,15 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     if (!isTeacher && !isAdmin) return;
     const newYear = activeYearId + 1;
     if (confirm(`Tạo năm học mới: ${newYear}?`)) {
-      updateData({ years: [...years, { id: newYear, name: `${newYear}` }] });
+      updateData({
+        years: [
+          ...years,
+          { id: newYear, name: `${newYear}`, lockedMonths: [] },
+        ],
+      });
       setActiveYearId(newYear);
     }
   };
-
   const handleEditYear = (yearId) => {
     if (!isTeacher && !isAdmin) return;
     const currentName = years.find((y) => y.id === yearId)?.name;
@@ -1380,29 +1635,29 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       updateData({ years: newYears });
     }
   };
-
   const handleDeleteYear = (yearId) => {
     if (!isTeacher) return;
-    if (
-      confirm(
-        "Bạn có chắc chắn muốn xóa năm học này? Dữ liệu sẽ mất vĩnh viễn!"
-      )
-    ) {
+    if (confirm("Bạn có chắc chắn muốn xóa năm học này?")) {
       const newYears = years.filter((y) => y.id !== yearId);
       updateData({ years: newYears });
       if (newYears.length > 0)
         setActiveYearId(newYears[newYears.length - 1].id);
     }
   };
-
   const toggleMonthLock = (monthId) => {
     if (!canEditMonths) return;
-    const newMonths = safeMonths.map((m) =>
-      m.id === monthId ? { ...m, isLocked: !m.isLocked } : m
-    );
-    updateData({ months: newMonths });
+    const updatedYears = years.map((y) => {
+      if (y.id === activeYearId) {
+        const currentLocks = y.lockedMonths || [];
+        const newLocks = currentLocks.includes(monthId)
+          ? currentLocks.filter((id) => id !== monthId)
+          : [...currentLocks, monthId];
+        return { ...y, lockedMonths: newLocks };
+      }
+      return y;
+    });
+    updateData({ years: updatedYears });
   };
-
   const handleDeleteMonth = (monthId) => {
     if (!canEditMonths) return;
     if (confirm("Xóa tháng này khỏi danh sách?")) {
@@ -1412,7 +1667,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         setActiveMonthId(newMonths[0]?.id || "ALL");
     }
   };
-
   const handleCarryOver = () => {
     if (!isTeacher) return;
     if (!confirm("Kết chuyển TỔNG PHẠT NĂM NAY thành NỢ CŨ cho năm sau?"))
@@ -1426,59 +1680,53 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     alert("Đã kết chuyển số dư thành công!");
   };
 
-  // --- BATCH UPDATE LOGIC ---
   const handleBatchUpdateConfirm = (selectedMonthIds) => {
-    if (!pendingRuleUpdate) return;
-    const { ruleId, newPoints, newFine, newLabel, newType } = pendingRuleUpdate;
-
-    // 1. Update Rule Definition
-    const updatedRules = rules.map((r) =>
-      r.id === ruleId
-        ? {
-            ...r,
-            label: newLabel,
-            points: newPoints,
-            fine: newFine,
-            type: newType,
-          }
-        : r
-    );
-
-    // 2. Batch Update Old Data (If months selected)
+    const updates = pendingBulkRulesUpdate
+      ? pendingBulkRulesUpdate
+      : pendingRuleUpdate
+      ? [pendingRuleUpdate]
+      : [];
+    if (updates.length === 0) return;
+    let updatedRules = [...rules];
+    updates.forEach((u) => {
+      updatedRules = updatedRules.map((r) =>
+        r.id === u.ruleId
+          ? {
+              ...r,
+              label: u.newLabel,
+              points: u.newPoints,
+              fine: u.newFine,
+              type: u.newType,
+            }
+          : r
+      );
+    });
     let newWeeklyData = { ...weeklyData };
-
     if (selectedMonthIds.length > 0) {
       Object.keys(newWeeklyData).forEach((key) => {
-        // Parse Key: y2024_m1_w1
-        const parts = key.split("_"); // ["y2024", "m1", "w1"]
+        const parts = key.split("_");
         if (parts.length < 3) return;
-
         const y = parseInt(parts[0].substring(1));
         const m = parseInt(parts[1].substring(1));
-
-        // Check Year and Month
         if (y === activeYearId && selectedMonthIds.includes(m)) {
           const weekData = newWeeklyData[key];
           Object.keys(weekData).forEach((userId) => {
             const userData = weekData[userId];
             let modified = false;
-
-            // Update Violations
             const newViolations = userData.violations.map((v) => {
-              if (v.ruleId === ruleId) {
+              const match = updates.find((u) => u.ruleId === v.ruleId);
+              if (match) {
                 modified = true;
                 return {
                   ...v,
-                  ruleLabel: newLabel,
-                  pointsAtTime: newPoints,
-                  fineAtTime: newFine,
-                  type: newType,
+                  ruleLabel: match.newLabel,
+                  pointsAtTime: match.newPoints,
+                  fineAtTime: match.newFine,
+                  type: match.newType,
                 };
               }
               return v;
             });
-
-            // Recalculate Totals
             if (modified) {
               let newScore = 80;
               let newFines = 0;
@@ -1487,7 +1735,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                 if (v.type === "penalty") newFines += v.fineAtTime || 0;
                 else if (v.type === "bonus") newFines -= v.fineAtTime || 0;
               });
-
               newWeeklyData[key][userId] = {
                 ...userData,
                 score: newScore,
@@ -1499,29 +1746,42 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         }
       });
     }
-
     updateData({ rules: updatedRules, weeklyData: newWeeklyData });
     setEditingRuleId(null);
     setBatchUpdateModalOpen(false);
     setPendingRuleUpdate(null);
+    setPendingBulkRulesUpdate(null);
+    setIsBulkRulesMode(false);
     alert("Cập nhật thành công!");
   };
 
   const handleSaveRule = () => {
     if (!newRule.label) return;
-
     if (editingRuleId) {
-      // Trigger Batch Update Modal
-      setPendingRuleUpdate({
-        ruleId: editingRuleId,
-        newPoints: Number(newRule.points),
-        newFine: Number(newRule.fine),
-        newLabel: newRule.label,
-        newType: newRule.type,
-      });
-      setBatchUpdateModalOpen(true);
+      const oldRule = rules.find((r) => r.id === editingRuleId);
+      if (
+        oldRule &&
+        (oldRule.points !== newRule.points ||
+          oldRule.fine !== newRule.fine ||
+          oldRule.type !== newRule.type)
+      ) {
+        setPendingRuleUpdate({
+          ruleId: editingRuleId,
+          newPoints: Number(newRule.points),
+          newFine: Number(newRule.fine),
+          newLabel: newRule.label,
+          newType: newRule.type,
+        });
+        setBatchUpdateModalOpen(true);
+      } else {
+        const updatedRules = rules.map((r) =>
+          r.id === editingRuleId ? { ...newRule, id: editingRuleId } : r
+        );
+        updateData({ rules: updatedRules });
+        setEditingRuleId(null);
+        setNewRule({ label: "", fine: 0, points: -2, type: "penalty" });
+      }
     } else {
-      // Add New Rule
       updateData({
         rules: [
           ...rules,
@@ -1544,6 +1804,140 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
   const handleDeleteRule = (id) => {
     if (confirm("Xóa?"))
       updateData({ rules: rules.filter((r) => r.id !== id) });
+  };
+  const toggleViolationSelection = (studentId, violationId) => {
+    const key = `${studentId}-${violationId}`;
+    setSelectedViolationKeys((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  };
+  const handleBulkEditConfirm = (newPoints, newFine) => {
+    let newWeeklyData = { ...weeklyData };
+    const dataKey = getKey(activeYearId, activeMonthId, activeWeek);
+    const violationsByStudent = {};
+    selectedViolationKeys.forEach((key) => {
+      const [studentId, violationId] = key.split("-");
+      if (!violationsByStudent[studentId]) violationsByStudent[studentId] = [];
+      violationsByStudent[studentId].push(violationId);
+    });
+    Object.keys(violationsByStudent).forEach((studentId) => {
+      if (!newWeeklyData[dataKey] || !newWeeklyData[dataKey][studentId]) return;
+      const userData = newWeeklyData[dataKey][studentId];
+      const targetIds = violationsByStudent[studentId];
+      let modified = false;
+      const newViolations = userData.violations.map((v) => {
+        if (targetIds.includes(String(v.id))) {
+          modified = true;
+          return { ...v, pointsAtTime: newPoints, fineAtTime: newFine };
+        }
+        return v;
+      });
+      if (modified) {
+        let newScore = 80;
+        let newTotalFines = 0;
+        newViolations.forEach((v) => {
+          newScore += v.pointsAtTime;
+          let fineChange = 0;
+          if (v.type === "penalty") fineChange = v.fineAtTime || 0;
+          else if (v.type === "bonus") fineChange = -(v.fineAtTime || 0);
+          newTotalFines += fineChange;
+        });
+        newWeeklyData[dataKey][studentId] = {
+          ...userData,
+          score: newScore,
+          fines: newTotalFines,
+          violations: newViolations,
+        };
+      }
+    });
+    updateData({ weeklyData: newWeeklyData });
+    setSelectedViolationKeys([]);
+    setBulkEditModalOpen(false);
+    setSelectionMode(false);
+    alert(`Đã cập nhật thành công!`);
+  };
+  const handleBulkDelete = () => {
+    if (!confirm(`Xóa ${selectedViolationKeys.length} lỗi?`)) return;
+    let newWeeklyData = { ...weeklyData };
+    const dataKey = getKey(activeYearId, activeMonthId, activeWeek);
+    const toDelete = {};
+    selectedViolationKeys.forEach((key) => {
+      const [studentId, violationId] = key.split("-");
+      if (!toDelete[studentId]) toDelete[studentId] = new Set();
+      toDelete[studentId].add(Number(violationId));
+    });
+    Object.keys(toDelete).forEach((studentId) => {
+      if (newWeeklyData[dataKey] && newWeeklyData[dataKey][studentId]) {
+        const userData = newWeeklyData[dataKey][studentId];
+        const idsToDelete = toDelete[studentId];
+        const newViolations = userData.violations.filter(
+          (v) => !idsToDelete.has(v.id)
+        );
+        let newScore = 80;
+        let newTotalFines = 0;
+        newViolations.forEach((v) => {
+          newScore += v.pointsAtTime;
+          let fineChange = 0;
+          if (v.type === "penalty") fineChange = v.fineAtTime || 0;
+          else if (v.type === "bonus") fineChange = -(v.fineAtTime || 0);
+          newTotalFines += fineChange;
+        });
+        newWeeklyData[dataKey][studentId] = {
+          ...userData,
+          score: newScore,
+          fines: newTotalFines,
+          violations: newViolations,
+        };
+      }
+    });
+    updateData({ weeklyData: newWeeklyData });
+    setSelectedViolationKeys([]);
+    setBulkEditModalOpen(false);
+    setSelectionMode(false);
+    alert("Đã xóa thành công!");
+  };
+
+  const toggleBulkRulesMode = () => {
+    if (isBulkRulesMode) {
+      setIsBulkRulesMode(false);
+      setTempRules([]);
+    } else {
+      setTempRules(JSON.parse(JSON.stringify(rules)));
+      setIsBulkRulesMode(true);
+    }
+  };
+  const handleTempRuleChange = (id, field, value) => {
+    setTempRules((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, [field]: value } : r))
+    );
+  };
+  const saveBulkRules = () => {
+    const changes = [];
+    tempRules.forEach((temp) => {
+      const original = rules.find((r) => r.id === temp.id);
+      if (
+        original &&
+        (original.points !== temp.points ||
+          original.fine !== temp.fine ||
+          original.type !== temp.type)
+      ) {
+        changes.push({
+          ruleId: temp.id,
+          newPoints: Number(temp.points),
+          newFine: Number(temp.fine),
+          newLabel: temp.label,
+          newType: temp.type,
+        });
+      }
+    });
+    if (changes.length > 0) {
+      setPendingBulkRulesUpdate(changes);
+      setBatchUpdateModalOpen(true);
+    } else {
+      updateData({ rules: tempRules });
+      setIsBulkRulesMode(false);
+      alert("Đã lưu danh sách nội quy!");
+    }
   };
 
   const renderInputList = () =>
@@ -1604,7 +1998,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                       </span>
                     </div>
 
-                    {!isStudent && !isMonthLocked && (
+                    {!isStudent && !isMonthLocked && !selectionMode && (
                       <div className="grid grid-cols-1 gap-2 mt-2">
                         <div className="flex flex-wrap gap-2">
                           {rules
@@ -1636,41 +2030,69 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                     )}
                     {sData.violations.length > 0 && (
                       <div className="mt-2 pt-2 border-t border-dashed border-gray-200">
-                        {sData.violations.map((v) => (
-                          <div
-                            key={v.id}
-                            className="flex justify-between text-xs text-gray-500 mb-1"
-                          >
-                            <span>
-                              {v.ruleLabel}{" "}
-                              {v.fineAtTime !== 0 &&
-                                `(${formatMoney(v.fineAtTime)})`}
-                            </span>
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={
-                                  v.pointsAtTime > 0
-                                    ? "text-green-600"
-                                    : "text-red-500"
-                                }
-                              >
-                                {v.pointsAtTime > 0
-                                  ? `+${v.pointsAtTime}`
-                                  : v.pointsAtTime}
-                              </span>
-                              {!isStudent && !isMonthLocked && (
-                                <button
-                                  onClick={() =>
-                                    handleRemoveViolation(student.id, v.id)
+                        {sData.violations.map((v) => {
+                          const vKey = `${student.id}-${v.id}`;
+                          return (
+                            <div
+                              key={v.id}
+                              className={`flex justify-between items-center text-xs text-gray-500 mb-1 p-1 rounded ${
+                                selectionMode &&
+                                selectedViolationKeys.includes(vKey)
+                                  ? "bg-indigo-100"
+                                  : ""
+                              }`}
+                            >
+                              <div className="flex items-center gap-2">
+                                {selectionMode && (
+                                  <button
+                                    onClick={() =>
+                                      toggleViolationSelection(student.id, v.id)
+                                    }
+                                  >
+                                    {selectedViolationKeys.includes(vKey) ? (
+                                      <CheckSquare
+                                        size={16}
+                                        className="text-indigo-600"
+                                      />
+                                    ) : (
+                                      <Square size={16} />
+                                    )}
+                                  </button>
+                                )}
+                                <span>
+                                  {v.ruleLabel}{" "}
+                                  {v.fineAtTime !== 0 &&
+                                    `(${formatMoney(v.fineAtTime)})`}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span
+                                  className={
+                                    v.pointsAtTime > 0
+                                      ? "text-green-600"
+                                      : "text-red-500"
                                   }
-                                  className="text-gray-400 hover:text-red-500"
                                 >
-                                  <Trash2 size={10} />
-                                </button>
-                              )}
+                                  {v.pointsAtTime > 0
+                                    ? `+${v.pointsAtTime}`
+                                    : v.pointsAtTime}
+                                </span>
+                                {!isStudent &&
+                                  !isMonthLocked &&
+                                  !selectionMode && (
+                                    <button
+                                      onClick={() =>
+                                        handleRemoveViolation(student.id, v.id)
+                                      }
+                                      className="text-gray-400 hover:text-red-500"
+                                    >
+                                      <Trash2 size={10} />
+                                    </button>
+                                  )}
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -1687,8 +2109,21 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       {batchUpdateModalOpen && (
         <BatchUpdateModal
           months={safeMonths}
+          isBulk={!!pendingBulkRulesUpdate}
           onConfirm={handleBatchUpdateConfirm}
           onClose={() => setBatchUpdateModalOpen(false)}
+        />
+      )}
+      {bulkEditModalOpen && (
+        <BulkEditModal
+          count={selectedViolationKeys.length}
+          onClose={() => {
+            setBulkEditModalOpen(false);
+            setSelectionMode(false);
+            setSelectedViolationKeys([]);
+          }}
+          onConfirm={handleBulkEditConfirm}
+          onDelete={handleBulkDelete}
         />
       )}
       {customModalOpen && selectedRuleForCustom && (
@@ -1794,6 +2229,16 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
           </div>
           <div className="flex items-center gap-3">
             <button
+              onClick={() => setActiveTab("notices")}
+              className={`p-2 rounded-full ${
+                activeTab === "notices"
+                  ? "bg-indigo-100 text-indigo-600"
+                  : "text-gray-500 hover:bg-gray-100"
+              }`}
+            >
+              <Bell size={18} />
+            </button>
+            <button
               onClick={() => setShowPasswordModal(true)}
               className="p-2 text-gray-500 hover:text-indigo-600 bg-gray-50 rounded-full"
             >
@@ -1833,6 +2278,16 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       </header>
 
       <main className="max-w-3xl mx-auto p-4">
+        {/* TAB: THÔNG BÁO */}
+        {activeTab === "notices" && (
+          <NoticeBoard
+            notices={notices}
+            currentUser={currentUser}
+            onSave={handleAddNotice}
+            onDelete={handleDeleteNotice}
+          />
+        )}
+
         {/* TAB: TỔNG QUAN (TÀI CHÍNH) */}
         {activeTab === "overview" && (
           <div className="fade-in space-y-4">
@@ -2090,24 +2545,51 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         {activeTab === "input" && (
           <div className="fade-in">
             {!isStudent && !isMonthLocked && (
-              <div className="flex justify-end mb-2 px-2">
-                <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-full shadow-sm border border-gray-200">
-                  <span className="text-xs font-bold text-gray-600">
-                    Chế độ Tùy chỉnh
-                  </span>
+              <div className="flex justify-between items-center mb-2 px-2">
+                <div className="flex items-center gap-2">
                   <button
-                    onClick={() => setCustomMode(!customMode)}
-                    className={`${
-                      customMode ? "bg-indigo-600" : "bg-gray-300"
-                    } w-8 h-4 rounded-full relative transition-colors`}
+                    onClick={() => {
+                      setSelectionMode(!selectionMode);
+                      setSelectedViolationKeys([]);
+                    }}
+                    className={`flex items-center gap-1 px-3 py-1.5 rounded-full text-xs font-bold shadow-sm border transition-all ${
+                      selectionMode
+                        ? "bg-indigo-600 text-white"
+                        : "bg-white text-gray-600"
+                    }`}
                   >
-                    <div
-                      className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full transition-transform ${
-                        customMode ? "translate-x-4" : ""
-                      }`}
-                    ></div>
+                    <CheckSquare size={14} /> Chọn nhiều
                   </button>
+                  {selectionMode && selectedViolationKeys.length > 0 && (
+                    <button
+                      onClick={() => setBulkEditModalOpen(true)}
+                      className="bg-indigo-600 text-white px-3 py-1.5 rounded-full text-xs font-bold shadow-sm animate-slideDown"
+                    >
+                      Xử lý ({selectedViolationKeys.length})
+                    </button>
+                  )}
                 </div>
+
+                {/* Nút chế độ tùy chỉnh cũ (nếu cần) */}
+                {!selectionMode && (
+                  <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-full shadow-sm border border-gray-200">
+                    <span className="text-xs font-bold text-gray-600">
+                      Tùy chỉnh
+                    </span>
+                    <button
+                      onClick={() => setCustomMode(!customMode)}
+                      className={`${
+                        customMode ? "bg-indigo-600" : "bg-gray-300"
+                      } w-8 h-4 rounded-full relative transition-colors`}
+                    >
+                      <div
+                        className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full transition-transform ${
+                          customMode ? "translate-x-4" : ""
+                        }`}
+                      ></div>
+                    </button>
+                  </div>
+                )}
               </div>
             )}
             {renderInputList()}
@@ -2117,70 +2599,157 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         {/* TAB: QUẢN LÝ NỘI QUY */}
         {activeTab === "rules" && (
           <div className="bg-white rounded-xl shadow-sm p-4 fade-in">
+            {/* Nút bật chế độ SỬA NHANH */}
             <div className="flex justify-between items-center mb-4">
               <h2 className="font-bold text-gray-800">Danh sách Nội quy</h2>
-              {editingRuleId && (
-                <button
-                  onClick={() => {
-                    setEditingRuleId(null);
-                    setNewRule({
-                      label: "",
-                      fine: 0,
-                      points: -2,
-                      type: "penalty",
-                    });
-                  }}
-                  className="text-sm text-gray-500 hover:text-red-500 flex items-center gap-1"
-                >
-                  <RefreshCw size={14} /> Hủy sửa
-                </button>
+              <div className="flex gap-2">
+                {editingRuleId && (
+                  <button
+                    onClick={() => {
+                      setEditingRuleId(null);
+                      setNewRule({
+                        label: "",
+                        fine: 0,
+                        points: -2,
+                        type: "penalty",
+                      });
+                    }}
+                    className="text-sm text-gray-500 hover:text-red-500 flex items-center gap-1"
+                  >
+                    <RefreshCw size={14} /> Hủy sửa
+                  </button>
+                )}
+                {canManageRules && !editingRuleId && (
+                  <button
+                    onClick={toggleBulkRulesMode}
+                    className={`text-xs font-bold px-2 py-1 rounded border flex items-center gap-1 ${
+                      isBulkRulesMode
+                        ? "bg-blue-600 text-white"
+                        : "bg-white text-gray-600"
+                    }`}
+                  >
+                    <ListChecks size={14} />{" "}
+                    {isBulkRulesMode ? "Hủy" : "Sửa nhanh"}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Danh sách Nội quy */}
+            <div className="space-y-2 mb-4">
+              {isBulkRulesMode ? (
+                // GIAO DIỆN SỬA NHANH
+                <div className="space-y-2">
+                  {tempRules.map((r) => (
+                    <div
+                      key={r.id}
+                      className="p-2 border rounded bg-blue-50 flex flex-col gap-2"
+                    >
+                      <input
+                        className="w-full p-1 border rounded text-sm"
+                        value={r.label}
+                        onChange={(e) =>
+                          handleTempRuleChange(r.id, "label", e.target.value)
+                        }
+                      />
+                      <div className="flex gap-2">
+                        <input
+                          type="number"
+                          className="w-1/3 p-1 border rounded text-sm"
+                          value={r.points}
+                          onChange={(e) =>
+                            handleTempRuleChange(
+                              r.id,
+                              "points",
+                              Number(e.target.value)
+                            )
+                          }
+                          placeholder="Điểm"
+                        />
+                        <input
+                          type="number"
+                          className="w-1/3 p-1 border rounded text-sm"
+                          value={r.fine}
+                          onChange={(e) =>
+                            handleTempRuleChange(
+                              r.id,
+                              "fine",
+                              Number(e.target.value)
+                            )
+                          }
+                          placeholder="Tiền"
+                        />
+                        <select
+                          className="w-1/3 p-1 border rounded text-xs"
+                          value={r.type}
+                          onChange={(e) =>
+                            handleTempRuleChange(r.id, "type", e.target.value)
+                          }
+                        >
+                          <option value="penalty">Phạt</option>
+                          <option value="bonus">Thưởng</option>
+                        </select>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    onClick={saveBulkRules}
+                    className="w-full py-2 bg-blue-600 text-white rounded font-bold text-sm mt-2"
+                  >
+                    Lưu tất cả thay đổi
+                  </button>
+                </div>
+              ) : (
+                // GIAO DIỆN HIỂN THỊ THƯỜNG
+                rules.map((r) => (
+                  <div
+                    key={r.id}
+                    className={`flex justify-between items-center p-2 border rounded ${
+                      editingRuleId === r.id
+                        ? "border-indigo-500 bg-indigo-50"
+                        : "bg-gray-50"
+                    }`}
+                  >
+                    <div>
+                      <p className="text-sm font-medium">{r.label}</p>
+                      <p
+                        className={`text-xs font-bold ${
+                          r.type === "bonus" ? "text-green-600" : "text-red-600"
+                        }`}
+                      >
+                        {r.points > 0 ? "+" : ""}
+                        {r.points}đ | {r.type === "bonus" ? "Thưởng" : "Phạt"}:{" "}
+                        {formatMoney(r.fine || 0)}
+                      </p>
+                    </div>
+                    {canManageRules && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => startEditingRule(r)}
+                          className="text-gray-400 hover:text-blue-500"
+                        >
+                          <Edit3 size={16} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteRule(r.id)}
+                          className="text-gray-400 hover:text-red-500"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))
               )}
             </div>
-            <div className="space-y-2 mb-4">
-              {rules.map((r) => (
-                <div
-                  key={r.id}
-                  className={`flex justify-between items-center p-2 border rounded ${
-                    editingRuleId === r.id
-                      ? "border-indigo-500 bg-indigo-50"
-                      : "bg-gray-50"
-                  }`}
-                >
-                  <div>
-                    <p className="text-sm font-medium">{r.label}</p>
-                    <p
-                      className={`text-xs font-bold ${
-                        r.type === "bonus" ? "text-green-600" : "text-red-600"
-                      }`}
-                    >
-                      {r.points > 0 ? "+" : ""}
-                      {r.points}đ | {r.type === "bonus" ? "Thưởng" : "Phạt"}:{" "}
-                      {formatMoney(r.fine || 0)}
-                    </p>
-                  </div>
-                  {canManageRules && (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => startEditingRule(r)}
-                        className="text-gray-400 hover:text-blue-500"
-                      >
-                        <Edit3 size={16} />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteRule(r.id)}
-                        className="text-gray-400 hover:text-red-500"
-                      >
-                        <Trash2 size={16} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-            {canManageRules && (
+
+            {/* Form thêm/sửa đơn lẻ (chỉ hiện khi không ở chế độ sửa nhanh) */}
+            {canManageRules && !isBulkRulesMode && (
               <div className="pt-4 border-t border-gray-100 space-y-2">
                 <h3 className="text-sm font-bold text-gray-700">
-                  {editingRuleId ? "Sửa quy định" : "Thêm quy định mới"}
+                  {editingRuleId
+                    ? "Sửa quy định (Có đồng bộ)"
+                    : "Thêm quy định mới"}
                 </h3>
                 <input
                   placeholder="Tên quy định"
@@ -2343,7 +2912,7 @@ export default function App() {
       appId,
       "public",
       "data",
-      "classData_v13",
+      DATA_VERSION,
       "main"
     );
     return onSnapshot(docRef, async (snap) => {
@@ -2391,7 +2960,7 @@ export default function App() {
     return {
       users,
       rules: DEFAULT_RULES,
-      years: [{ id: 2024, name: "2024" }],
+      years: [{ id: 2024, name: "2024", lockedMonths: [] }],
       weeklyData: {},
       adminPermissions: DEFAULT_PERMISSIONS,
       months: FIXED_MONTHS.map((m) => ({ ...m, isLocked: false })),
@@ -2406,7 +2975,7 @@ export default function App() {
       appId,
       "public",
       "data",
-      "classData_v13",
+      DATA_VERSION,
       "main"
     );
     await updateDoc(docRef, newData);
