@@ -40,9 +40,15 @@ import {
   ArrowRightLeft,
   RefreshCw,
   Lock,
+  Unlock,
   BarChart2,
   UserCog,
   Eye,
+  Wallet,
+  TrendingUp,
+  ArrowRightCircle,
+  SlidersHorizontal,
+  CheckSquare, // Icon chọn tháng
 } from "lucide-react";
 
 // --- FIREBASE SETUP ---
@@ -75,14 +81,7 @@ const ROLE_LABELS = {
   [ROLES.STUDENT]: "Học sinh",
 };
 
-const DEFAULT_MANAGER_PERMISSIONS = {
-  allowAdd: false,
-  allowDelete: false,
-  allowEditName: true,
-  allowResetPin: true,
-  allowMoveGroup: false,
-};
-
+// Quyền mặc định
 const DEFAULT_PERMISSIONS = {
   canManageUsers: false,
   canManageRules: false,
@@ -92,6 +91,7 @@ const DEFAULT_PERMISSIONS = {
 const FIXED_MONTHS = Array.from({ length: 12 }, (_, i) => ({
   id: i + 1,
   name: `Tháng ${i + 1}`,
+  isLocked: false,
 }));
 
 const REAL_STUDENTS = [
@@ -193,7 +193,6 @@ const DEFAULT_RULES = [
   },
 ];
 
-// > 80 MỚI TỐT, 80 LÀ KHÁ
 const getRating = (score) => {
   if (score > 80) return { label: "Tốt", color: "bg-green-100 text-green-700" };
   if (score >= 65) return { label: "Khá", color: "bg-blue-100 text-blue-700" };
@@ -210,6 +209,134 @@ const formatMoney = (amount) =>
   );
 
 // --- COMPONENTS ---
+
+// 1. Custom Rule Modal (Tùy chỉnh điểm/tiền cho 1 lần phạt)
+const CustomRuleModal = ({ rule, onClose, onConfirm }) => {
+  const [customPoints, setCustomPoints] = useState(rule.points);
+  const [customFine, setCustomFine] = useState(rule.fine);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-xs animate-slideDown">
+        <h3 className="font-bold text-gray-800 mb-2">
+          Tùy chỉnh: {rule.label}
+        </h3>
+        <p className="text-xs text-gray-500 mb-4">
+          Thay đổi điểm/tiền cho lần phạt này
+        </p>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-bold text-gray-600">
+              Điểm (+/-)
+            </label>
+            <input
+              type="number"
+              className="w-full p-2 border rounded"
+              value={customPoints}
+              onChange={(e) => setCustomPoints(Number(e.target.value))}
+            />
+          </div>
+          <div>
+            <label className="text-xs font-bold text-gray-600">
+              Tiền (VNĐ)
+            </label>
+            <input
+              type="number"
+              className="w-full p-2 border rounded"
+              value={customFine}
+              onChange={(e) => setCustomFine(Number(e.target.value))}
+            />
+          </div>
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={onClose}
+              className="flex-1 py-2 bg-gray-100 rounded"
+            >
+              Hủy
+            </button>
+            <button
+              onClick={() => onConfirm(customPoints, customFine)}
+              className="flex-1 py-2 bg-indigo-600 text-white rounded"
+            >
+              Áp dụng
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// 2. Batch Update Modal (Áp dụng sửa đổi cho dữ liệu cũ)
+const BatchUpdateModal = ({ months, onConfirm, onClose }) => {
+  const [selectedMonths, setSelectedMonths] = useState([]);
+
+  const toggleMonth = (id) => {
+    setSelectedMonths((prev) =>
+      prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]
+    );
+  };
+
+  const toggleAll = () => {
+    if (selectedMonths.length === months.length) setSelectedMonths([]);
+    else setSelectedMonths(months.map((m) => m.id));
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm animate-slideDown">
+        <h3 className="font-bold text-indigo-900 mb-2">Cập nhật dữ liệu cũ?</h3>
+        <p className="text-sm text-gray-600 mb-4">
+          Bạn vừa thay đổi nội quy. Bạn có muốn áp dụng mức điểm/phạt mới này
+          cho các vi phạm đã ghi nhận trước đó không?
+        </p>
+
+        <div className="mb-4 max-h-60 overflow-y-auto border rounded p-2">
+          <div className="flex items-center gap-2 mb-2 border-b pb-2">
+            <input
+              type="checkbox"
+              checked={selectedMonths.length === months.length}
+              onChange={toggleAll}
+              className="w-4 h-4"
+            />
+            <span className="font-bold text-sm">Chọn tất cả các tháng</span>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {months.map((m) => (
+              <div key={m.id} className="flex items-center gap-1">
+                <input
+                  type="checkbox"
+                  checked={selectedMonths.includes(m.id)}
+                  onChange={() => toggleMonth(m.id)}
+                  className="w-3 h-3"
+                />
+                <span className="text-xs">{m.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={() => onConfirm([])}
+            className="flex-1 py-2 bg-gray-100 text-gray-600 rounded text-xs font-bold"
+          >
+            Không, chỉ lưu mới
+          </button>
+          <button
+            onClick={() => onConfirm(selectedMonths)}
+            className={`flex-1 py-2 text-white rounded text-xs font-bold ${
+              selectedMonths.length > 0 ? "bg-indigo-600" : "bg-gray-400"
+            }`}
+            disabled={selectedMonths.length === 0}
+          >
+            Cập nhật
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const ChangePasswordModal = ({ user, onClose, onSave }) => {
   const [oldPin, setOldPin] = useState("");
@@ -468,7 +595,7 @@ const LoginScreen = ({ dbState, onLogin }) => {
           <h1 className="text-2xl font-bold text-gray-800">
             Thống kê tình hình lớp 12/4
           </h1>
-          <p className="text-gray-500 text-sm">by Củ Cãi muối</p>
+          <p className="text-gray-500 text-sm">By Củ Cải Muối</p>
         </div>
         {!selectedUser ? (
           <>
@@ -897,7 +1024,14 @@ const AccountManager = ({
 
 // 4. Dashboard
 const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
-  const { users, weeklyData, rules, years = [], adminPermissions } = dbState;
+  const {
+    users,
+    weeklyData,
+    rules,
+    years = [],
+    months = [],
+    adminPermissions,
+  } = dbState;
 
   const [activeYearId, setActiveYearId] = useState(
     years.length > 0 ? years[years.length - 1].id : 2024
@@ -909,9 +1043,19 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     currentUser.role === ROLES.STUDENT ? "overview" : "input"
   );
   const [expandedGroup, setExpandedGroup] = useState(null);
+  const [customMode, setCustomMode] = useState(false);
+  const [customModalOpen, setCustomModalOpen] = useState(false);
+  const [selectedRuleForCustom, setSelectedRuleForCustom] = useState(null);
+  const [selectedStudentForCustom, setSelectedStudentForCustom] =
+    useState(null);
+
+  const [batchUpdateModalOpen, setBatchUpdateModalOpen] = useState(false); // State modal batch
+  const [pendingRuleUpdate, setPendingRuleUpdate] = useState(null); // Lưu rule đang chờ update
 
   const [startMonth, setStartMonth] = useState(1);
   const [endMonth, setEndMonth] = useState(1);
+  const [startYear, setStartYear] = useState(activeYearId);
+  const [endYear, setEndYear] = useState(activeYearId);
 
   const [newRule, setNewRule] = useState({
     label: "",
@@ -930,6 +1074,18 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
 
   const canManageRules =
     isTeacher || (isAdmin && adminPermissions.canManageRules);
+  const canEditMonths = isTeacher || isAdmin;
+
+  const safeMonths =
+    months.length > 0
+      ? months
+      : Array.from({ length: 12 }, (_, i) => ({
+          id: i + 1,
+          name: `Tháng ${i + 1}`,
+          isLocked: false,
+        }));
+  const currentMonthObj = safeMonths.find((m) => m.id === activeMonthId);
+  const isMonthLocked = currentMonthObj?.isLocked || false;
 
   const getKey = (year, month, week) => `y${year}_m${month}_w${week}`;
 
@@ -945,9 +1101,48 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     .sort((a, b) => a.stt - b.stt);
 
   const activeMonthLabel =
-    activeMonthId === "ALL" ? "Cả Năm" : `Tháng ${activeMonthId}`;
+    activeMonthId === "ALL"
+      ? "Cả Năm"
+      : safeMonths.find((m) => m.id === activeMonthId)?.name || "Tháng ?";
 
-  // STATS FOR OVERVIEW TAB
+  // --- STATS CALCULATION ---
+  const classFundStats = useMemo(() => {
+    let weekTotal = 0;
+    let monthTotal = 0;
+    let yearTotal = 0;
+
+    const allStudents = Object.values(users).filter(
+      (u) => u.role === ROLES.STUDENT || u.role === ROLES.MANAGER
+    );
+
+    allStudents.forEach((st) => {
+      weekTotal += getStudentData(
+        st.id,
+        activeYearId,
+        activeMonthId,
+        activeWeek
+      ).fines;
+
+      if (activeMonthId !== "ALL") {
+        for (let w = 1; w <= 4; w++)
+          monthTotal += getStudentData(
+            st.id,
+            activeYearId,
+            activeMonthId,
+            w
+          ).fines;
+      }
+
+      safeMonths.forEach((m) => {
+        for (let w = 1; w <= 4; w++)
+          yearTotal += getStudentData(st.id, activeYearId, m.id, w).fines;
+      });
+    });
+
+    return { weekTotal, monthTotal, yearTotal };
+  }, [users, weeklyData, activeYearId, activeMonthId, activeWeek, safeMonths]);
+
+  // --- USER STATS ---
   const overviewStats = useMemo(() => {
     return studentList
       .map((student) => {
@@ -955,9 +1150,10 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         let currentMonthTotalFines = 0;
         let weeklyFines = {};
         let yearTotalFines = 0;
+        const debtCarryOver = student.debtCarryOver || 0;
+        yearTotalFines += debtCarryOver;
 
-        // Tính tổng phạt cả năm
-        FIXED_MONTHS.forEach((m) => {
+        safeMonths.forEach((m) => {
           for (let w = 1; w <= 4; w++) {
             const data = getStudentData(student.id, activeYearId, m.id, w);
             yearTotalFines += data.fines;
@@ -967,7 +1163,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         if (activeMonthId === "ALL") {
           let totalScoreAllTime = 0;
           let totalWeeks = 0;
-          FIXED_MONTHS.forEach((m) => {
+          safeMonths.forEach((m) => {
             for (let w = 1; w <= 4; w++) {
               const data = getStudentData(student.id, activeYearId, m.id, w);
               totalScoreAllTime += data.score;
@@ -996,52 +1192,12 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
           currentMonthFines: currentMonthTotalFines,
           weeklyFines,
           yearTotalFines,
+          debtCarryOver,
         };
       })
       .sort((a, b) => b.currentMonthAvg - a.currentMonthAvg);
-  }, [users, weeklyData, activeMonthId, activeYearId]);
+  }, [users, weeklyData, activeMonthId, activeYearId, safeMonths]);
 
-  // TÍNH TỔNG QUỸ LỚP (TẤT CẢ THÀNH VIÊN)
-  const classFundStats = useMemo(() => {
-    let weekTotal = 0;
-    let monthTotal = 0;
-    let yearTotal = 0;
-
-    const allStudents = Object.values(users).filter(
-      (u) => u.role === ROLES.STUDENT || u.role === ROLES.MANAGER
-    );
-
-    allStudents.forEach((st) => {
-      // Tuần
-      weekTotal += getStudentData(
-        st.id,
-        activeYearId,
-        activeMonthId,
-        activeWeek
-      ).fines;
-
-      // Tháng
-      if (activeMonthId !== "ALL") {
-        for (let w = 1; w <= 4; w++)
-          monthTotal += getStudentData(
-            st.id,
-            activeYearId,
-            activeMonthId,
-            w
-          ).fines;
-      }
-
-      // Năm
-      FIXED_MONTHS.forEach((m) => {
-        for (let w = 1; w <= 4; w++)
-          yearTotal += getStudentData(st.id, activeYearId, m.id, w).fines;
-      });
-    });
-
-    return { weekTotal, monthTotal, yearTotal };
-  }, [users, weeklyData, activeYearId, activeMonthId, activeWeek]);
-
-  // CUSTOM RANGE STATS
   const rangeStats = useMemo(() => {
     const results = studentList
       .map((student) => {
@@ -1049,38 +1205,43 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         let totalFines = 0;
         let weeksCount = 0;
 
-        for (let m = startMonth; m <= endMonth; m++) {
+        let currentY = startYear;
+        let currentM = startMonth;
+        const endValue = endYear * 100 + endMonth;
+
+        while (currentY * 100 + currentM <= endValue) {
           for (let w = 1; w <= 4; w++) {
-            const data = getStudentData(student.id, activeYearId, m, w);
+            const data = getStudentData(student.id, currentY, currentM, w);
             totalScore += data.score;
             totalFines += data.fines;
             weeksCount++;
           }
+          currentM++;
+          if (currentM > 12) {
+            currentM = 1;
+            currentY++;
+          }
         }
 
         const avgScore = weeksCount > 0 ? totalScore / weeksCount : 80;
-
-        return {
-          ...student,
-          rangeAvg: avgScore,
-          rangeFines: totalFines,
-        };
+        return { ...student, rangeAvg: avgScore, rangeFines: totalFines };
       })
       .sort((a, b) => b.rangeAvg - a.rangeAvg);
 
-    if (isStudent) {
-      return results.filter((s) => s.id === currentUser.id);
-    }
+    if (isStudent) return results.filter((s) => s.id === currentUser.id);
     return results;
   }, [
     users,
     weeklyData,
-    activeYearId,
     startMonth,
+    startYear,
     endMonth,
+    endYear,
     isStudent,
     currentUser.id,
   ]);
+
+  // --- ACTIONS ---
 
   const handleChangeSelfPassword = (newPin) => {
     const updatedUsers = {
@@ -1092,10 +1253,32 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     alert("Đổi mật khẩu thành công!");
   };
 
-  const handleAddViolation = (targetId, ruleId) => {
-    if (isStudent) return;
-    const rule = rules.find((r) => r.id === ruleId);
-    if (!rule) return;
+  const handleRuleClick = (studentId, rule) => {
+    if (customMode) {
+      setSelectedStudentForCustom(studentId);
+      setSelectedRuleForCustom(rule);
+      setCustomModalOpen(true);
+    } else {
+      handleAddViolation(studentId, rule, rule.points, rule.fine);
+    }
+  };
+
+  const handleCustomConfirm = (points, fine) => {
+    if (selectedStudentForCustom && selectedRuleForCustom) {
+      handleAddViolation(
+        selectedStudentForCustom,
+        selectedRuleForCustom,
+        points,
+        fine
+      );
+      setCustomModalOpen(false);
+      setSelectedRuleForCustom(null);
+      setSelectedStudentForCustom(null);
+    }
+  };
+
+  const handleAddViolation = (targetId, rule, points, fine) => {
+    if (isStudent || isMonthLocked) return;
     const cD = getStudentData(
       targetId,
       activeYearId,
@@ -1106,26 +1289,23 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       id: Date.now(),
       ruleId: rule.id,
       ruleLabel: rule.label,
-      fineAtTime: rule.fine || 0,
-      pointsAtTime: rule.points,
+      fineAtTime: fine || 0,
+      pointsAtTime: points,
       timestamp: Date.now(),
       by: currentUser.name,
       type: rule.type,
     };
 
-    // LOGIC TRỪ LUI TIỀN:
-    // - Nếu là PHẠT (penalty): CỘNG thêm vào nợ (fines tăng)
-    // - Nếu là THƯỞNG (bonus): TRỪ bớt nợ (fines giảm)
     let fineChange = 0;
     if (rule.type === "penalty") {
-      fineChange = rule.fine || 0;
+      fineChange = fine || 0;
     } else if (rule.type === "bonus") {
-      fineChange = -(rule.fine || 0);
+      fineChange = -(fine || 0);
     }
 
     const uD = {
       ...cD,
-      score: cD.score + rule.points,
+      score: cD.score + points,
       fines: cD.fines + fineChange,
       violations: [nE, ...cD.violations],
     };
@@ -1142,7 +1322,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
   };
 
   const handleRemoveViolation = (targetId, entryId) => {
-    if (isStudent) return;
+    if (isStudent || isMonthLocked) return;
     const cD = getStudentData(
       targetId,
       activeYearId,
@@ -1152,11 +1332,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     const entry = cD.violations.find((v) => v.id === entryId);
     if (!entry) return;
 
-    // LOGIC HOÀN TÁC (Ngược lại với handleAddViolation):
-    // - Xóa lỗi PHẠT -> Giảm nợ (Trừ)
-    // - Xóa lỗi THƯỞNG -> Tăng nợ lại (Cộng)
     let fineCorrection = 0;
-    // Check type or fallback to points logic for old data
     if (entry.type === "penalty" || (!entry.type && entry.pointsAtTime < 0)) {
       fineCorrection = -(entry.fineAtTime || 0);
     } else if (
@@ -1187,24 +1363,165 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
   const handleAddYear = () => {
     if (!isTeacher && !isAdmin) return;
     const newYear = activeYearId + 1;
-    const newYearName = `Năm học ${newYear}-${newYear + 1}`;
-    if (confirm(`Bạn có chắc muốn tạo năm học mới: ${newYearName}?`)) {
-      updateData({ years: [...years, { id: newYear, name: newYearName }] });
+    if (confirm(`Tạo năm học mới: ${newYear}?`)) {
+      updateData({ years: [...years, { id: newYear, name: `${newYear}` }] });
       setActiveYearId(newYear);
-      alert("Đã qua năm mới thành công!");
     }
   };
 
-  // --- RULES MANAGEMENT ---
+  const handleEditYear = (yearId) => {
+    if (!isTeacher && !isAdmin) return;
+    const currentName = years.find((y) => y.id === yearId)?.name;
+    const newName = prompt("Nhập tên năm học mới:", currentName);
+    if (newName && newName !== currentName) {
+      const newYears = years.map((y) =>
+        y.id === yearId ? { ...y, name: newName } : y
+      );
+      updateData({ years: newYears });
+    }
+  };
+
+  const handleDeleteYear = (yearId) => {
+    if (!isTeacher) return;
+    if (
+      confirm(
+        "Bạn có chắc chắn muốn xóa năm học này? Dữ liệu sẽ mất vĩnh viễn!"
+      )
+    ) {
+      const newYears = years.filter((y) => y.id !== yearId);
+      updateData({ years: newYears });
+      if (newYears.length > 0)
+        setActiveYearId(newYears[newYears.length - 1].id);
+    }
+  };
+
+  const toggleMonthLock = (monthId) => {
+    if (!canEditMonths) return;
+    const newMonths = safeMonths.map((m) =>
+      m.id === monthId ? { ...m, isLocked: !m.isLocked } : m
+    );
+    updateData({ months: newMonths });
+  };
+
+  const handleDeleteMonth = (monthId) => {
+    if (!canEditMonths) return;
+    if (confirm("Xóa tháng này khỏi danh sách?")) {
+      const newMonths = safeMonths.filter((m) => m.id !== monthId);
+      updateData({ months: newMonths });
+      if (activeMonthId === monthId)
+        setActiveMonthId(newMonths[0]?.id || "ALL");
+    }
+  };
+
+  const handleCarryOver = () => {
+    if (!isTeacher) return;
+    if (!confirm("Kết chuyển TỔNG PHẠT NĂM NAY thành NỢ CŨ cho năm sau?"))
+      return;
+    let updatedUsers = { ...users };
+    overviewStats.forEach((stat) => {
+      if (updatedUsers[stat.id])
+        updatedUsers[stat.id].debtCarryOver = stat.yearTotalFines;
+    });
+    updateData({ users: updatedUsers });
+    alert("Đã kết chuyển số dư thành công!");
+  };
+
+  // --- BATCH UPDATE LOGIC ---
+  const handleBatchUpdateConfirm = (selectedMonthIds) => {
+    if (!pendingRuleUpdate) return;
+    const { ruleId, newPoints, newFine, newLabel, newType } = pendingRuleUpdate;
+
+    // 1. Update Rule Definition
+    const updatedRules = rules.map((r) =>
+      r.id === ruleId
+        ? {
+            ...r,
+            label: newLabel,
+            points: newPoints,
+            fine: newFine,
+            type: newType,
+          }
+        : r
+    );
+
+    // 2. Batch Update Old Data (If months selected)
+    let newWeeklyData = { ...weeklyData };
+
+    if (selectedMonthIds.length > 0) {
+      Object.keys(newWeeklyData).forEach((key) => {
+        // Parse Key: y2024_m1_w1
+        const parts = key.split("_"); // ["y2024", "m1", "w1"]
+        if (parts.length < 3) return;
+
+        const y = parseInt(parts[0].substring(1));
+        const m = parseInt(parts[1].substring(1));
+
+        // Check Year and Month
+        if (y === activeYearId && selectedMonthIds.includes(m)) {
+          const weekData = newWeeklyData[key];
+          Object.keys(weekData).forEach((userId) => {
+            const userData = weekData[userId];
+            let modified = false;
+
+            // Update Violations
+            const newViolations = userData.violations.map((v) => {
+              if (v.ruleId === ruleId) {
+                modified = true;
+                return {
+                  ...v,
+                  ruleLabel: newLabel,
+                  pointsAtTime: newPoints,
+                  fineAtTime: newFine,
+                  type: newType,
+                };
+              }
+              return v;
+            });
+
+            // Recalculate Totals
+            if (modified) {
+              let newScore = 80;
+              let newFines = 0;
+              newViolations.forEach((v) => {
+                newScore += v.pointsAtTime;
+                if (v.type === "penalty") newFines += v.fineAtTime || 0;
+                else if (v.type === "bonus") newFines -= v.fineAtTime || 0;
+              });
+
+              newWeeklyData[key][userId] = {
+                ...userData,
+                score: newScore,
+                fines: newFines,
+                violations: newViolations,
+              };
+            }
+          });
+        }
+      });
+    }
+
+    updateData({ rules: updatedRules, weeklyData: newWeeklyData });
+    setEditingRuleId(null);
+    setBatchUpdateModalOpen(false);
+    setPendingRuleUpdate(null);
+    alert("Cập nhật thành công!");
+  };
+
   const handleSaveRule = () => {
     if (!newRule.label) return;
+
     if (editingRuleId) {
-      const updatedRules = rules.map((r) =>
-        r.id === editingRuleId ? { ...newRule, id: editingRuleId } : r
-      );
-      updateData({ rules: updatedRules });
-      setEditingRuleId(null);
+      // Trigger Batch Update Modal
+      setPendingRuleUpdate({
+        ruleId: editingRuleId,
+        newPoints: Number(newRule.points),
+        newFine: Number(newRule.fine),
+        newLabel: newRule.label,
+        newType: newRule.type,
+      });
+      setBatchUpdateModalOpen(true);
     } else {
+      // Add New Rule
       updateData({
         rules: [
           ...rules,
@@ -1216,8 +1533,8 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
           },
         ],
       });
+      setNewRule({ label: "", fine: 0, points: -2, type: "penalty" });
     }
-    setNewRule({ label: "", fine: 0, points: -2, type: "penalty" });
   };
 
   const startEditingRule = (rule) => {
@@ -1232,14 +1549,11 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
   const renderInputList = () =>
     [1, 2, 3, 4].map((groupId) => {
       let groupMembers = studentList.filter((s) => s.group === groupId);
-
       if (isManager && currentUser.group !== groupId) return null;
-
       if (isStudent) {
         if (currentUser.group !== groupId) return null;
         groupMembers = groupMembers.filter((s) => s.id === currentUser.id);
       }
-
       const isExpanded = expandedGroup === groupId;
       return (
         <div
@@ -1290,7 +1604,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                       </span>
                     </div>
 
-                    {!isStudent && (
+                    {!isStudent && !isMonthLocked && (
                       <div className="grid grid-cols-1 gap-2 mt-2">
                         <div className="flex flex-wrap gap-2">
                           {rules
@@ -1298,9 +1612,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                             .map((r) => (
                               <button
                                 key={r.id}
-                                onClick={() =>
-                                  handleAddViolation(student.id, r.id)
-                                }
+                                onClick={() => handleRuleClick(student.id, r)}
                                 className="text-[10px] px-2 py-1 bg-green-50 border border-green-200 text-green-700 rounded hover:bg-green-100"
                               >
                                 +{r.points} {r.label}
@@ -1313,9 +1625,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                             .map((r) => (
                               <button
                                 key={r.id}
-                                onClick={() =>
-                                  handleAddViolation(student.id, r.id)
-                                }
+                                onClick={() => handleRuleClick(student.id, r)}
                                 className="text-[10px] px-2 py-1 bg-red-50 border border-red-200 text-red-700 rounded hover:bg-red-100"
                               >
                                 {r.points} {r.label}
@@ -1324,7 +1634,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                         </div>
                       </div>
                     )}
-
                     {sData.violations.length > 0 && (
                       <div className="mt-2 pt-2 border-t border-dashed border-gray-200">
                         {sData.violations.map((v) => (
@@ -1332,7 +1641,11 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                             key={v.id}
                             className="flex justify-between text-xs text-gray-500 mb-1"
                           >
-                            <span>{v.ruleLabel}</span>
+                            <span>
+                              {v.ruleLabel}{" "}
+                              {v.fineAtTime !== 0 &&
+                                `(${formatMoney(v.fineAtTime)})`}
+                            </span>
                             <div className="flex items-center gap-2">
                               <span
                                 className={
@@ -1345,7 +1658,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                                   ? `+${v.pointsAtTime}`
                                   : v.pointsAtTime}
                               </span>
-                              {!isStudent && (
+                              {!isStudent && !isMonthLocked && (
                                 <button
                                   onClick={() =>
                                     handleRemoveViolation(student.id, v.id)
@@ -1371,6 +1684,20 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
+      {batchUpdateModalOpen && (
+        <BatchUpdateModal
+          months={safeMonths}
+          onConfirm={handleBatchUpdateConfirm}
+          onClose={() => setBatchUpdateModalOpen(false)}
+        />
+      )}
+      {customModalOpen && selectedRuleForCustom && (
+        <CustomRuleModal
+          rule={selectedRuleForCustom}
+          onClose={() => setCustomModalOpen(false)}
+          onConfirm={handleCustomConfirm}
+        />
+      )}
       {showPasswordModal && (
         <ChangePasswordModal
           user={currentUser}
@@ -1378,6 +1705,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
           onSave={handleChangeSelfPassword}
         />
       )}
+
       <header className="bg-white shadow-sm sticky top-0 z-20">
         <div className="max-w-3xl mx-auto px-4 py-2 flex justify-between items-center border-b border-gray-100">
           <div className="flex items-center gap-2">
@@ -1394,34 +1722,75 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                 ))}
               </select>
               {(isTeacher || isAdmin) && (
-                <button
-                  onClick={handleAddYear}
-                  className="text-indigo-600 hover:bg-indigo-200 p-1 rounded"
-                >
-                  <PlusCircle size={14} />
-                </button>
+                <>
+                  <button
+                    onClick={() => handleEditYear(activeYearId)}
+                    className="text-blue-400 hover:text-blue-600 p-1 rounded"
+                    title="Sửa tên năm"
+                  >
+                    <Edit3 size={14} />
+                  </button>
+                  <button
+                    onClick={handleAddYear}
+                    className="text-indigo-600 hover:bg-indigo-200 p-1 rounded"
+                    title="Thêm năm mới"
+                  >
+                    <PlusCircle size={14} />
+                  </button>
+                  {isTeacher && (
+                    <button
+                      onClick={() => handleDeleteYear(activeYearId)}
+                      className="text-red-400 hover:text-red-600 p-1 rounded"
+                      title="Xóa năm hiện tại"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </>
               )}
             </div>
             <div className="bg-indigo-100 p-2 rounded-lg text-indigo-700">
               <Calendar size={20} />
             </div>
-            <select
-              value={activeMonthId}
-              onChange={(e) => {
-                const val =
-                  e.target.value === "ALL" ? "ALL" : Number(e.target.value);
-                setActiveMonthId(val);
-                setActiveWeek(1);
-              }}
-              className="font-bold text-lg text-gray-800 bg-transparent outline-none cursor-pointer hover:text-indigo-600"
-            >
-              {FIXED_MONTHS.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-              <option value="ALL">Cả Năm</option>
-            </select>
+            <div className="flex items-center">
+              <select
+                value={activeMonthId}
+                onChange={(e) => {
+                  const val =
+                    e.target.value === "ALL" ? "ALL" : Number(e.target.value);
+                  setActiveMonthId(val);
+                  setActiveWeek(1);
+                }}
+                className="font-bold text-lg text-gray-800 bg-transparent outline-none cursor-pointer hover:text-indigo-600"
+              >
+                {safeMonths.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+                <option value="ALL">Cả Năm</option>
+              </select>
+              {activeMonthId !== "ALL" && canEditMonths && (
+                <div className="flex items-center ml-2 gap-1">
+                  <button
+                    onClick={() => toggleMonthLock(activeMonthId)}
+                    className={`${
+                      isMonthLocked ? "text-red-500" : "text-gray-400"
+                    } hover:scale-110`}
+                  >
+                    {isMonthLocked ? <Lock size={16} /> : <Unlock size={16} />}
+                  </button>
+                  {isTeacher && (
+                    <button
+                      onClick={() => handleDeleteMonth(activeMonthId)}
+                      className="text-gray-300 hover:text-red-500"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -1467,7 +1836,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         {/* TAB: TỔNG QUAN (TÀI CHÍNH) */}
         {activeTab === "overview" && (
           <div className="fade-in space-y-4">
-            {/* CARD THỐNG KÊ QUỸ LỚP TOÀN BỘ */}
             <div className="grid grid-cols-3 gap-2">
               <div className="bg-white p-3 rounded-xl shadow-sm border border-blue-100 flex flex-col items-center justify-center text-center">
                 <p className="text-[10px] text-gray-500 uppercase font-bold mb-1">
@@ -1552,8 +1920,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                                   : "-"}
                               </td>
                             ))}
-
-                          {/* LOGIC MÀU SẮC: DƯ (ÂM) MÀU XANH, NỢ (DƯƠNG) MÀU ĐỎ */}
                           <td
                             className={`p-3 text-right font-bold ${
                               s.currentMonthFines > 0
@@ -1589,6 +1955,24 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         {activeTab === "stats" && (
           <div className="fade-in space-y-4">
             <div className="bg-white rounded-xl shadow-sm p-4">
+              {isTeacher && activeMonthId === "ALL" && (
+                <div className="mb-6 p-4 bg-yellow-50 rounded-lg border border-yellow-100 flex justify-between items-center">
+                  <div>
+                    <h3 className="font-bold text-yellow-800">
+                      Kết chuyển Năm Học
+                    </h3>
+                    <p className="text-xs text-yellow-600">
+                      Cộng dồn tổng phạt năm nay vào nợ cũ.
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleCarryOver}
+                    className="bg-yellow-600 text-white px-3 py-2 rounded font-bold text-sm flex gap-2"
+                  >
+                    <ArrowRightCircle size={16} /> Kết chuyển
+                  </button>
+                </div>
+              )}
               <div className="flex items-center gap-2 mb-4">
                 <BarChart2 className="text-orange-500" />
                 <h2 className="font-bold text-gray-800">Thống kê tùy chọn</h2>
@@ -1603,9 +1987,20 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                     onChange={(e) => setStartMonth(Number(e.target.value))}
                     className="w-full p-2 border rounded bg-gray-50"
                   >
-                    {FIXED_MONTHS.map((m) => (
+                    {safeMonths.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.name}
+                      </option>
+                    ))}
+                  </select>
+                  <select
+                    value={startYear}
+                    onChange={(e) => setStartYear(Number(e.target.value))}
+                    className="w-full p-2 border rounded bg-gray-50 mt-1"
+                  >
+                    {years.map((y) => (
+                      <option key={y.id} value={y.id}>
+                        {y.name}
                       </option>
                     ))}
                   </select>
@@ -1620,25 +2015,35 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                     onChange={(e) => setEndMonth(Number(e.target.value))}
                     className="w-full p-2 border rounded bg-gray-50"
                   >
-                    {FIXED_MONTHS.map((m) => (
+                    {safeMonths.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.name}
                       </option>
                     ))}
                   </select>
+                  <select
+                    value={endYear}
+                    onChange={(e) => setEndYear(Number(e.target.value))}
+                    className="w-full p-2 border rounded bg-gray-50 mt-1"
+                  >
+                    {years.map((y) => (
+                      <option key={y.id} value={y.id}>
+                        {y.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
-              {endMonth < startMonth && (
+              {(endYear < startYear ||
+                (endYear === startYear && endMonth < startMonth)) && (
                 <p className="text-red-500 text-xs">
-                  Tháng kết thúc phải lớn hơn hoặc bằng tháng bắt đầu
+                  Thời gian kết thúc không hợp lệ
                 </p>
               )}
             </div>
-
             <div className="bg-white rounded-xl shadow-sm overflow-hidden">
               <div className="p-3 bg-orange-50 border-b border-orange-100 text-xs text-orange-800 font-medium">
-                Kết quả: Tháng {startMonth} - {endMonth} ({rangeStats.length}{" "}
-                kết quả)
+                Kết quả ({rangeStats.length} học sinh)
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm text-left">
@@ -1683,7 +2088,30 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
 
         {/* TAB: CHẤM ĐIỂM */}
         {activeTab === "input" && (
-          <div className="fade-in">{renderInputList()}</div>
+          <div className="fade-in">
+            {!isStudent && !isMonthLocked && (
+              <div className="flex justify-end mb-2 px-2">
+                <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-full shadow-sm border border-gray-200">
+                  <span className="text-xs font-bold text-gray-600">
+                    Chế độ Tùy chỉnh
+                  </span>
+                  <button
+                    onClick={() => setCustomMode(!customMode)}
+                    className={`${
+                      customMode ? "bg-indigo-600" : "bg-gray-300"
+                    } w-8 h-4 rounded-full relative transition-colors`}
+                  >
+                    <div
+                      className={`absolute top-0.5 left-0.5 w-3 h-3 bg-white rounded-full transition-transform ${
+                        customMode ? "translate-x-4" : ""
+                      }`}
+                    ></div>
+                  </button>
+                </div>
+              </div>
+            )}
+            {renderInputList()}
+          </div>
         )}
 
         {/* TAB: QUẢN LÝ NỘI QUY */}
@@ -1788,9 +2216,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                   />
                   <input
                     type="number"
-                    placeholder={
-                      newRule.type === "bonus" ? "Tiền thưởng" : "Tiền phạt"
-                    }
+                    placeholder="Tiền phạt"
                     className="w-1/4 p-2 border rounded text-sm"
                     value={newRule.fine}
                     onChange={(e) =>
@@ -1965,9 +2391,10 @@ export default function App() {
     return {
       users,
       rules: DEFAULT_RULES,
-      years: [{ id: 2024, name: "Năm học 2024-2025" }],
+      years: [{ id: 2024, name: "2024" }],
       weeklyData: {},
       adminPermissions: DEFAULT_PERMISSIONS,
+      months: FIXED_MONTHS.map((m) => ({ ...m, isLocked: false })),
     };
   };
 
