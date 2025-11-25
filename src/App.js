@@ -51,7 +51,7 @@ import {
   Bell,
   MessageSquare,
   Send,
-  Megaphone, // <-- ĐÃ BỔ SUNG ICON NÀY ĐỂ SỬA LỖI
+  Megaphone,
 } from "lucide-react";
 
 // --- FIREBASE SETUP ---
@@ -390,6 +390,7 @@ const NoticeBoard = ({ notices, currentUser, onSave, onDelete }) => {
   );
 };
 
+// 2. Modal Sửa Đồng Loạt
 const BulkEditModal = ({ count, onClose, onConfirm, onDelete }) => {
   const [points, setPoints] = useState(0);
   const [fine, setFine] = useState(0);
@@ -502,6 +503,7 @@ const CustomRuleModal = ({ rule, onClose, onConfirm }) => {
   );
 };
 
+// 3. Batch Update Modal
 const BatchUpdateModal = ({ months, onConfirm, onClose, isBulk }) => {
   const [selectedMonths, setSelectedMonths] = useState([]);
   const toggleMonth = (id) =>
@@ -577,6 +579,7 @@ const ChangePasswordModal = ({ user, onClose, onSave }) => {
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [error, setError] = useState("");
+
   const handleSubmit = () => {
     if (oldPin !== user.pin) return setError("Mã PIN cũ không đúng");
     if (newPin.length < 4)
@@ -584,6 +587,7 @@ const ChangePasswordModal = ({ user, onClose, onSave }) => {
     if (newPin !== confirmPin) return setError("Xác nhận mã PIN không khớp");
     onSave(newPin);
   };
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
@@ -640,16 +644,19 @@ const UserEditModal = ({ targetUser, currentUser, onSave, onClose }) => {
     group: targetUser.group,
     role: targetUser.role,
   });
+
   const isTeacher = currentUser.role === ROLES.TEACHER;
   const canEditRole =
     isTeacher ||
     (currentUser.role === ROLES.ADMIN && targetUser.role !== ROLES.TEACHER);
+
   const availableRoles = [
     ROLES.STUDENT,
     ROLES.MANAGER,
     ROLES.ADMIN,
     ...(isTeacher ? [ROLES.TEACHER] : []),
   ];
+
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
@@ -744,15 +751,18 @@ const LoginScreen = ({ dbState, onLogin }) => {
   const [error, setError] = useState("");
   const [searchStudent, setSearchStudent] = useState("");
 
-  const getSortedList = (roleFilter) =>
-    Object.values(dbState.users)
+  const getSortedList = (roleFilter) => {
+    return Object.values(dbState.users)
       .filter((u) => u.role === roleFilter)
       .sort((a, b) => (a.stt || 999) - (b.stt || 999));
+  };
+
   const admins = Object.values(dbState.users).filter(
     (u) => u.role === ROLES.TEACHER || u.role === ROLES.ADMIN
   );
   const managers = getSortedList(ROLES.MANAGER);
   const students = getSortedList(ROLES.STUDENT);
+
   const handleLogin = () => {
     if (selectedUser && pin === selectedUser.pin) onLogin(selectedUser);
     else setError("Mã PIN không chính xác");
@@ -818,10 +828,8 @@ const LoginScreen = ({ dbState, onLogin }) => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-600 to-indigo-500 p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">
-            Thống Kê Tình Hình Lớp 12/4
-          </h1>
-          <p className="text-gray-500 text-sm">By Củ Cải Muối</p>
+          <h1 className="text-2xl font-bold text-gray-800">Lớp Học Vui Vẻ</h1>
+          <p className="text-gray-500 text-sm">Năm học mới & Danh sách mới</p>
         </div>
         {!selectedUser ? (
           <>
@@ -951,6 +959,7 @@ const AccountManager = ({
   const isTeacher = currentUser.role === ROLES.TEACHER;
   const isAdmin = currentUser.role === ROLES.ADMIN;
   const isManager = currentUser.role === ROLES.MANAGER;
+
   const canManageUsers =
     isTeacher || (isAdmin && adminPermissions.canManageUsers);
 
@@ -1276,7 +1285,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     weeklyData,
     rules,
     years = [],
-    months = [],
     adminPermissions,
     notices = [],
   } = dbState;
@@ -1334,16 +1342,18 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     isTeacher || (isAdmin && adminPermissions.canManageRules);
   const canEditMonths = isTeacher || isAdmin;
 
-  const safeMonths =
-    months.length > 0
-      ? months
-      : Array.from({ length: 12 }, (_, i) => ({
-          id: i + 1,
-          name: `Tháng ${i + 1}`,
-          isLocked: false,
-        }));
-  const currentMonthObj = safeMonths.find((m) => m.id === activeMonthId);
-  const isMonthLocked = currentMonthObj?.isLocked || false;
+  // Lock Logic based on YEAR specific data
+  // Khóa tháng theo từng NĂM RIÊNG BIỆT
+  const currentYearObj = years.find((y) => y.id === activeYearId) || {
+    lockedMonths: [],
+  };
+  const isMonthLocked =
+    currentYearObj.lockedMonths?.includes(activeMonthId) || false;
+
+  const safeMonths = FIXED_MONTHS.map((m) => ({
+    ...m,
+    isLocked: currentYearObj.lockedMonths?.includes(m.id) || false,
+  }));
 
   const getKey = (year, month, week) => `y${year}_m${month}_w${week}`;
   const getStudentData = (userId, year, month, week) =>
