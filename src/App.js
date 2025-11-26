@@ -101,7 +101,6 @@ const DEFAULT_PERMISSIONS = {
   canResetPin: false,
 };
 
-// Đã sửa lại tên biến cho đúng
 const FIXED_MONTHS = Array.from({ length: 12 }, (_, i) => ({
   id: i + 1,
   name: `Tháng ${i + 1}`,
@@ -830,10 +829,8 @@ const LoginScreen = ({ dbState, onLogin }) => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-600 to-indigo-500 p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">
-            Thống Kê Tình Hình Lớp 12/4
-          </h1>
-          <p className="text-gray-500 text-sm">By Banana</p>
+          <h1 className="text-2xl font-bold text-gray-800">Lớp Học Vui Vẻ</h1>
+          <p className="text-gray-500 text-sm">Năm học mới & Danh sách mới</p>
         </div>
         {!selectedUser ? (
           <>
@@ -965,8 +962,20 @@ const AccountManager = ({
   const isAdmin = currentUser.role === ROLES.ADMIN;
   const isManager = currentUser.role === ROLES.MANAGER;
 
-  const canManageUsers =
-    isTeacher || (isAdmin && adminPermissions.canManageUsers);
+  const canAddUser =
+    isTeacher ||
+    (isAdmin && adminPermissions.canManageUsers) ||
+    (isManager && managerPermissions.allowAdd);
+
+  const checkManagerAction = (action) => {
+    if (isTeacher || (isAdmin && adminPermissions.canManageUsers)) return true;
+    if (isManager) {
+      if (action === "edit") return managerPermissions.allowEditName;
+      if (action === "delete") return managerPermissions.allowDelete;
+      if (action === "pin") return managerPermissions.allowResetPin;
+    }
+    return false;
+  };
 
   const handleSaveUser = (updatedData) => {
     const userId = editingUser.id;
@@ -1505,6 +1514,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
 
   // === CHECK MANAGER PERMISSIONS HERE ===
   // Logic: Teacher/Admin always true. Manager depends on setting. Student always false.
+  // FIX: Thêm biến này vào để check trong render
   const canUseBulk =
     isTeacher || isAdmin || (isManager && managerPermissions.allowBulkActions);
   const canUseCustom =
@@ -1635,9 +1645,11 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         let totalScore = 0;
         let totalFines = 0;
         let weeksCount = 0;
+
         let currentY = startYear;
         let currentM = startMonth;
         const endValue = endYear * 100 + endMonth;
+
         while (currentY * 100 + currentM <= endValue) {
           for (let w = 1; w <= 4; w++) {
             const data = getStudentData(student.id, currentY, currentM, w);
@@ -1651,10 +1663,12 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
             currentY++;
           }
         }
+
         const avgScore = weeksCount > 0 ? totalScore / weeksCount : 80;
         return { ...student, rangeAvg: avgScore, rangeFines: totalFines };
       })
       .sort((a, b) => b.rangeAvg - a.rangeAvg);
+
     if (isStudent) return results.filter((s) => s.id === currentUser.id);
     return results;
   }, [
@@ -1667,6 +1681,8 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     isStudent,
     currentUser.id,
   ]);
+
+  // --- ACTIONS ---
 
   const handleChangeSelfPassword = (newPin) => {
     const updatedUsers = {
