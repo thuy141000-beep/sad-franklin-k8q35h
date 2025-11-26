@@ -68,7 +68,7 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = "lop12-4-2025";
-const DATA_VERSION = "classData_v13";
+const DATA_VERSION = "classData_v13"; // Giữ nguyên để dùng lại dữ liệu cũ
 
 // --- CONSTANTS ---
 const ROLES = {
@@ -91,8 +91,8 @@ const DEFAULT_MANAGER_PERMISSIONS = {
   allowEditName: true,
   allowResetPin: true,
   allowMoveGroup: false,
-  allowBulkActions: false, // Quyền chọn nhiều
-  allowCustomMode: false, // Quyền tùy chỉnh điểm
+  allowBulkActions: false,
+  allowCustomMode: false,
 };
 
 const DEFAULT_PERMISSIONS = {
@@ -101,10 +101,10 @@ const DEFAULT_PERMISSIONS = {
   canResetPin: false,
 };
 
+// Đã sửa lại tên biến cho đúng
 const FIXED_MONTHS = Array.from({ length: 12 }, (_, i) => ({
   id: i + 1,
   name: `Tháng ${i + 1}`,
-  isLocked: false,
 }));
 
 const REAL_STUDENTS = [
@@ -830,10 +830,8 @@ const LoginScreen = ({ dbState, onLogin }) => {
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-600 to-indigo-500 p-4">
       <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">
-            Thống Kê Tình Hình Lớp 12/4
-          </h1>
-          <p className="text-gray-500 text-sm">By Củ Cải Muối</p>
+          <h1 className="text-2xl font-bold text-gray-800">Lớp Học Vui Vẻ</h1>
+          <p className="text-gray-500 text-sm">Năm học mới & Danh sách mới</p>
         </div>
         {!selectedUser ? (
           <>
@@ -1243,7 +1241,7 @@ const AccountManager = ({
             {isManager ? `Tổ ${currentUser.group}` : "Toàn lớp"}
           </p>
         </div>
-        {canManageUsers && (
+        {canAddUser && (
           <button
             onClick={() => setIsAdding(!isAdding)}
             className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 text-xs flex items-center gap-1"
@@ -1319,87 +1317,119 @@ const AccountManager = ({
       </div>
 
       <div className="max-h-[500px] overflow-y-auto p-2">
-        {displayedUsers.map((user) => (
-          <div
-            key={user.id}
-            className="flex justify-between items-center p-3 hover:bg-gray-50 rounded-lg border-b border-gray-50 last:border-0 group"
-          >
-            <div className="flex items-center gap-3">
-              <div
-                className={`p-2 rounded-full ${
-                  user.role === ROLES.TEACHER
-                    ? "bg-purple-100 text-purple-600"
-                    : user.role === ROLES.ADMIN
-                    ? "bg-red-100 text-red-600"
-                    : user.role === ROLES.MANAGER
-                    ? "bg-blue-100 text-blue-600"
-                    : "bg-gray-100 text-gray-500"
-                }`}
-              >
-                {user.role === ROLES.TEACHER ? (
-                  <School size={16} />
-                ) : user.role === ROLES.ADMIN ? (
-                  <ShieldAlert size={16} />
-                ) : (
-                  <User size={16} />
+        {displayedUsers.map((user) => {
+          // Determine if current user can edit THIS user
+          const isTargetStudent = user.role === ROLES.STUDENT;
+          const isSameGroup = user.group === currentUser.group;
+
+          const canEdit =
+            isTeacher ||
+            (isAdmin && adminPermissions.canManageUsers) ||
+            (isManager &&
+              isTargetStudent &&
+              isSameGroup &&
+              checkManagerAction("edit"));
+          const canDelete =
+            isTeacher ||
+            (isAdmin && adminPermissions.canManageUsers) ||
+            (isManager &&
+              isTargetStudent &&
+              isSameGroup &&
+              checkManagerAction("delete"));
+          const canPin =
+            isTeacher ||
+            (isAdmin && adminPermissions.canResetPin) ||
+            (isManager &&
+              isTargetStudent &&
+              isSameGroup &&
+              checkManagerAction("pin"));
+
+          return (
+            <div
+              key={user.id}
+              className="flex justify-between items-center p-3 hover:bg-gray-50 rounded-lg border-b border-gray-50 last:border-0 group"
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className={`p-2 rounded-full ${
+                    user.role === ROLES.TEACHER
+                      ? "bg-purple-100 text-purple-600"
+                      : user.role === ROLES.ADMIN
+                      ? "bg-red-100 text-red-600"
+                      : user.role === ROLES.MANAGER
+                      ? "bg-blue-100 text-blue-600"
+                      : "bg-gray-100 text-gray-500"
+                  }`}
+                >
+                  {user.role === ROLES.TEACHER ? (
+                    <School size={16} />
+                  ) : user.role === ROLES.ADMIN ? (
+                    <ShieldAlert size={16} />
+                  ) : (
+                    <User size={16} />
+                  )}
+                </div>
+                <div>
+                  <p className="font-medium text-gray-800 text-sm">
+                    <span className="text-gray-400 text-xs mr-1 font-normal">
+                      #{user.stt}
+                    </span>
+                    {user.name}
+                  </p>
+                  <p className="text-[10px] text-gray-400 uppercase">
+                    {ROLE_LABELS[user.role]}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {isTeacher && user.role === ROLES.STUDENT && (
+                  <button
+                    onClick={() => toggleUserNoticePermission(user.id)}
+                    className={`p-1.5 rounded ${
+                      user.canPostNotices
+                        ? "text-blue-600 bg-blue-50"
+                        : "text-gray-300 hover:bg-gray-100"
+                    }`}
+                    title="Cấp quyền Thông báo"
+                  >
+                    <Megaphone size={16} />
+                  </button>
+                )}
+                {user.role !== ROLES.TEACHER && (
+                  <>
+                    {canEdit && (
+                      <button
+                        onClick={() => setEditingUser(user)}
+                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                        title="Sửa thông tin"
+                      >
+                        <UserCog size={18} />
+                      </button>
+                    )}
+                    {canPin && (
+                      <button
+                        onClick={() => handleResetPin(user)}
+                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded"
+                        title="Đổi PIN"
+                      >
+                        <Key size={16} />
+                      </button>
+                    )}
+                    {canDelete && (
+                      <button
+                        onClick={() => handleDeleteUser(user.id)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                        title="Xóa thành viên"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </>
                 )}
               </div>
-              <div>
-                <p className="font-medium text-gray-800 text-sm">
-                  <span className="text-gray-400 text-xs mr-1 font-normal">
-                    #{user.stt}
-                  </span>
-                  {user.name}
-                </p>
-                <p className="text-[10px] text-gray-400 uppercase">
-                  {ROLE_LABELS[user.role]}
-                </p>
-              </div>
             </div>
-            <div className="flex items-center gap-2">
-              {isTeacher && user.role === ROLES.STUDENT && (
-                <button
-                  onClick={() => toggleUserNoticePermission(user.id)}
-                  className={`p-1.5 rounded ${
-                    user.canPostNotices
-                      ? "text-blue-600 bg-blue-50"
-                      : "text-gray-300 hover:bg-gray-100"
-                  }`}
-                  title="Cấp quyền Thông báo"
-                >
-                  <Megaphone size={16} />
-                </button>
-              )}
-              {canManageUsers && user.role !== ROLES.TEACHER && (
-                <>
-                  <button
-                    onClick={() => setEditingUser(user)}
-                    className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
-                    title="Sửa thông tin"
-                  >
-                    <UserCog size={18} />
-                  </button>
-                  {(isTeacher || (isAdmin && adminPermissions.canResetPin)) && (
-                    <button
-                      onClick={() => handleResetPin(user)}
-                      className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded"
-                      title="Đổi PIN"
-                    >
-                      <Key size={16} />
-                    </button>
-                  )}
-                  <button
-                    onClick={() => handleDeleteUser(user.id)}
-                    className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                    title="Xóa thành viên"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
@@ -1478,16 +1508,25 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
   const canUseCustom =
     isTeacher || isAdmin || (isManager && managerPermissions.allowCustomMode);
 
-  const safeMonths =
-    months.length > 0
-      ? months
-      : Array.from({ length: 12 }, (_, i) => ({
-          id: i + 1,
-          name: `Tháng ${i + 1}`,
-          isLocked: false,
-        }));
-  const currentMonthObj = safeMonths.find((m) => m.id === activeMonthId);
-  const isMonthLocked = currentMonthObj?.isLocked || false;
+  // FIX: Auto-create currentYearObj if missing
+  const currentYearObj = years.find((y) => y.id === activeYearId) || {
+    id: activeYearId,
+    name: `${activeYearId}`,
+    lockedMonths: [],
+  };
+
+  const safeMonths = FIXED_MONTHS.map((m) => ({
+    ...m,
+    isLocked: currentYearObj.lockedMonths?.includes(m.id) || false,
+  }));
+
+  const activeMonthLabel =
+    activeMonthId === "ALL"
+      ? "Cả Năm"
+      : safeMonths.find((m) => m.id === activeMonthId)?.name || "Tháng ?";
+  const isMonthLocked =
+    activeMonthId !== "ALL" &&
+    safeMonths.find((m) => m.id === activeMonthId)?.isLocked;
 
   const getKey = (year, month, week) => `y${year}_m${month}_w${week}`;
   const getStudentData = (userId, year, month, week) =>
@@ -1499,12 +1538,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
   const studentList = Object.values(users)
     .filter((u) => u.role === ROLES.STUDENT || u.role === ROLES.MANAGER)
     .sort((a, b) => a.stt - b.stt);
-  const activeMonthLabel =
-    activeMonthId === "ALL"
-      ? "Cả Năm"
-      : safeMonths.find((m) => m.id === activeMonthId)?.name || "Tháng ?";
 
-  // ... (Giữ nguyên các hàm tính toán thống kê cũ) ...
   // --- STATS CALCULATION ---
   const classFundStats = useMemo(() => {
     let weekTotal = 0;
@@ -1547,12 +1581,14 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         let yearTotalFines = 0;
         const debtCarryOver = student.debtCarryOver || 0;
         yearTotalFines += debtCarryOver;
+
         safeMonths.forEach((m) => {
           for (let w = 1; w <= 4; w++) {
             const data = getStudentData(student.id, activeYearId, m.id, w);
             yearTotalFines += data.fines;
           }
         });
+
         if (activeMonthId === "ALL") {
           let totalScoreAllTime = 0;
           let totalWeeks = 0;
@@ -1758,17 +1794,24 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
 
   const handleAddYear = () => {
     if (!isTeacher && !isAdmin) return;
+
+    // FIX 1: Ensure structure when adding
     const newYear = activeYearId + 1;
+    const updatedYears = [
+      ...years,
+      {
+        id: newYear,
+        name: `${newYear}`,
+        lockedMonths: [], // Đảm bảo trường này luôn tồn tại
+      },
+    ];
+
     if (confirm(`Tạo năm học mới: ${newYear}?`)) {
-      updateData({
-        years: [
-          ...years,
-          { id: newYear, name: `${newYear}`, lockedMonths: [] },
-        ],
-      });
+      updateData({ years: updatedYears });
       setActiveYearId(newYear);
     }
   };
+
   const handleEditYear = (yearId) => {
     if (!isTeacher && !isAdmin) return;
     const currentName = years.find((y) => y.id === yearId)?.name;
@@ -1791,16 +1834,23 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
   };
   const toggleMonthLock = (monthId) => {
     if (!canEditMonths) return;
-    const updatedYears = years.map((y) => {
-      if (y.id === activeYearId) {
-        const currentLocks = y.lockedMonths || [];
-        const newLocks = currentLocks.includes(monthId)
-          ? currentLocks.filter((id) => id !== monthId)
-          : [...currentLocks, monthId];
-        return { ...y, lockedMonths: newLocks };
-      }
-      return y;
-    });
+    let updatedYears = [...years];
+    const yearIndex = updatedYears.findIndex((y) => y.id === activeYearId);
+
+    if (yearIndex === -1) {
+      updatedYears.push({
+        id: activeYearId,
+        name: `${activeYearId}`,
+        lockedMonths: [monthId],
+      });
+    } else {
+      const currentYear = updatedYears[yearIndex];
+      const currentLocks = currentYear.lockedMonths || [];
+      const newLocks = currentLocks.includes(monthId)
+        ? currentLocks.filter((id) => id !== monthId)
+        : [...currentLocks, monthId];
+      updatedYears[yearIndex] = { ...currentYear, lockedMonths: newLocks };
+    }
     updateData({ years: updatedYears });
   };
   const handleDeleteMonth = (monthId) => {
@@ -2718,7 +2768,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                   )}
                 </div>
 
-                {/* NÚT TÙY CHỈNH - CHECK QUYỀN */}
+                {/* Nút chế độ tùy chỉnh cũ (nếu cần) */}
                 {!selectionMode && canUseCustom && (
                   <div className="flex items-center gap-2 bg-white px-3 py-1.5 rounded-full shadow-sm border border-gray-200">
                     <span className="text-xs font-bold text-gray-600">
