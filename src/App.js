@@ -98,8 +98,10 @@ const DEFAULT_MANAGER_PERMISSIONS = {
   allowBulkActions: false,
   allowCustomMode: false,
   allowReceiveNotis: false,
+  allowRunBot: false,
 };
 
+// ĐÃ BỔ SUNG BIẾN BỊ THIẾU
 const DEFAULT_PERMISSIONS = {
   canManageUsers: false,
   canManageRules: false,
@@ -115,11 +117,14 @@ const DEFAULT_BOT_CONFIG = {
 
   // Cấu hình trực nhật
   cleaningSource: "stt", // 'stt', 'group', 'penalty'
+  cleaningScoreBasis: "both", // 'week', 'month', 'both'
   cleaningStartStt: 1,
   cleaningTargetGroup: 1,
+  cleaningPrioritizeLowScore: false,
+  cleaningPerDay: 2,
 
   // Cấu hình nhắc nhở
-  targetManagerIds: [], // Danh sách ID tổ trưởng cần nhắc
+  targetManagerIds: [],
 };
 
 const FIXED_MONTHS = Array.from({ length: 12 }, (_, i) => ({
@@ -254,6 +259,7 @@ const formatDate = (timestamp) => {
 
 // --- COMPONENTS ---
 
+// 1. Help Modal
 const HelpModal = ({ role, onClose }) => {
   const guides = {
     [ROLES.TEACHER]: [
@@ -304,7 +310,7 @@ const HelpModal = ({ role, onClose }) => {
   );
 };
 
-// 2. Bot Configuration Modal (Nâng cấp logic chọn người)
+// 2. Bot Configuration Modal
 const BotConfigModal = ({
   config = DEFAULT_BOT_CONFIG,
   onClose,
@@ -322,7 +328,6 @@ const BotConfigModal = ({
     .filter((u) => u.role === ROLES.MANAGER)
     .sort((a, b) => a.group - b.group);
 
-  // Xử lý chọn tổ trưởng để nhắc
   const toggleManagerSelection = (id) => {
     const current = localConfig.targetManagerIds || [];
     const next = current.includes(id)
@@ -331,7 +336,6 @@ const BotConfigModal = ({
     setLocalConfig({ ...localConfig, targetManagerIds: next });
   };
 
-  // Chọn mặc định tất cả tổ trưởng nếu chưa có
   useEffect(() => {
     if (
       !localConfig.targetManagerIds ||
@@ -408,59 +412,71 @@ const BotConfigModal = ({
             </>
           )}
 
-          {/* Cấu hình Trực nhật Nâng cao */}
           {localConfig.mode === "cleaning" && (
             <div className="space-y-3">
-              <div>
-                <label className="block text-xs font-bold text-gray-600 mb-1">
-                  Nguồn nhân sự:
-                </label>
-                <select
-                  className="w-full p-2 border rounded text-sm"
-                  value={localConfig.cleaningSource}
+              <div className="flex items-center gap-2 bg-red-50 p-2 rounded border border-red-100">
+                <input
+                  type="checkbox"
+                  checked={localConfig.cleaningPrioritizeLowScore}
                   onChange={(e) =>
                     setLocalConfig({
                       ...localConfig,
-                      cleaningSource: e.target.value,
+                      cleaningPrioritizeLowScore: e.target.checked,
                     })
                   }
-                >
-                  <option value="stt">Theo STT (Xoay vòng)</option>
-                  <option value="group">Theo Tổ</option>
-                  <option value="penalty">
-                    Theo Danh sách Phạt (&lt; 81đ)
-                  </option>
-                </select>
+                  className="w-4 h-4"
+                />
+                <label className="text-xs font-bold text-red-700">
+                  Ưu tiên phạt dưới 81 điểm
+                </label>
               </div>
 
-              {localConfig.cleaningSource === "group" && (
+              {localConfig.cleaningPrioritizeLowScore && (
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1">
-                    Chọn Tổ:
+                    Xét điểm theo:
                   </label>
                   <select
-                    className="w-full p-2 border rounded text-sm"
-                    value={localConfig.cleaningTargetGroup}
+                    className="w-full p-2 border rounded text-sm text-red-600 font-bold"
+                    value={localConfig.cleaningScoreBasis}
                     onChange={(e) =>
                       setLocalConfig({
                         ...localConfig,
-                        cleaningTargetGroup: Number(e.target.value),
+                        cleaningScoreBasis: e.target.value,
                       })
                     }
                   >
-                    {[1, 2, 3, 4].map((g) => (
-                      <option key={g} value={g}>
-                        Tổ {g}
-                      </option>
-                    ))}
+                    <option value="week">Tuần hiện tại ({activeWeek})</option>
+                    <option value="month">
+                      Tháng hiện tại ({activeMonthId})
+                    </option>
+                    <option value="both">Cả Tuần và Tháng</option>
                   </select>
                 </div>
               )}
 
-              {localConfig.cleaningSource === "stt" && (
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">
+                  Số người trực / ngày:
+                </label>
+                <input
+                  type="number"
+                  className="w-full p-2 border rounded"
+                  value={localConfig.cleaningPerDay}
+                  onChange={(e) =>
+                    setLocalConfig({
+                      ...localConfig,
+                      cleaningPerDay: Number(e.target.value),
+                    })
+                  }
+                  placeholder="Mặc định: 2"
+                />
+              </div>
+
+              {!localConfig.cleaningPrioritizeLowScore && (
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1">
-                    Bắt đầu từ STT:
+                    Hoặc bắt đầu từ STT:
                   </label>
                   <input
                     type="number"
@@ -476,14 +492,9 @@ const BotConfigModal = ({
                   />
                 </div>
               )}
-
-              <p className="text-[10px] text-gray-400 italic">
-                Bot sẽ tự động chia đều số lượng thành viên cho 6 ngày (T2-T7).
-              </p>
             </div>
           )}
 
-          {/* Chế độ nhắc nhở: Chọn đích danh */}
           {localConfig.mode === "remind" && (
             <div className="space-y-2">
               <p className="text-xs font-bold text-gray-600">
@@ -716,7 +727,7 @@ const NoticeBoard = ({
   );
 };
 
-// ... (Giữ nguyên Modal: BulkEdit, CustomRule, BatchUpdate, ChangePassword, UserEdit, LoginScreen) ...
+// ... (Giữ nguyên Modal: BulkEdit, CustomRule, BatchUpdate, ChangePassword, UserEdit, LoginScreen, AccountManager) ...
 const BulkEditModal = ({ count, onClose, onConfirm, onDelete }) => {
   const [points, setPoints] = useState(0);
   const [fine, setFine] = useState(0);
@@ -1249,20 +1260,20 @@ const LoginScreen = ({ dbState, onLogin }) => {
               {error && (
                 <p className="text-red-500 text-xs mt-2 text-center">{error}</p>
               )}
-            </div>{" "}
-            <div className="flex gap-3">
-              <button
-                onClick={() => setSelectedUser(null)}
-                className="flex-1 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 text-sm font-medium"
-              >
-                Quay lại
-              </button>
-              <button
-                onClick={handleLogin}
-                className="flex-1 py-2 text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 text-sm font-medium shadow-lg shadow-indigo-200"
-              >
-                Đăng nhập
-              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setSelectedUser(null)}
+                  className="flex-1 py-2 text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 text-sm font-medium"
+                >
+                  Quay lại
+                </button>
+                <button
+                  onClick={handleLogin}
+                  className="flex-1 py-2 text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 text-sm font-medium shadow-lg shadow-indigo-200"
+                >
+                  Đăng nhập
+                </button>
+              </div>
             </div>{" "}
           </div>
         )}{" "}
@@ -1558,6 +1569,23 @@ const AccountManager = ({
                   }
                 >
                   {managerPermissions.allowCustomMode ? (
+                    <ToggleRight size={24} />
+                  ) : (
+                    <ToggleLeft size={24} />
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100">
+                <span className="text-xs text-gray-700">Sử dụng Bot</span>
+                <button
+                  onClick={() => toggleManagerPermission("allowRunBot")}
+                  className={
+                    managerPermissions.allowRunBot
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {managerPermissions.allowRunBot ? (
                     <ToggleRight size={24} />
                   ) : (
                     <ToggleLeft size={24} />
@@ -2041,102 +2069,145 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     updateData({ notices: newNotices });
   };
 
-  // --- BOT FUNCTION (UPDATED V21) ---
+  // --- BOT FUNCTION (UPDATED V25: BOTH WEEK & MONTH PENALTY) ---
   const handleRunBot = (config) => {
     let content = "";
     let title = "";
 
-    // 1. CLEANING MODE (Updated: Dynamic Grouping)
     if (config.mode === "cleaning") {
       title = "🧹 Lịch trực nhật tuần này";
       content = "Danh sách phân công trực nhật:\n\n";
       const days = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
 
-      // A. Determine Pool of Students
       let pool = [];
       if (config.cleaningSource === "group") {
-        // Get students from specific group
         pool = [...studentList]
           .filter((s) => s.group === config.cleaningTargetGroup)
           .sort((a, b) => a.stt - b.stt);
       } else if (config.cleaningSource === "penalty") {
-        // Get students with low score
-        pool = overviewStats
-          .filter((s) => s.currentMonthAvg < 81)
-          .sort((a, b) => a.currentMonthAvg - b.currentMonthAvg); // Lowest first
+        let penaltySource = [];
+
+        // 1. Get Week Scores
+        const weekScores = studentList.map((s) => {
+          const d = getStudentData(
+            s.id,
+            activeYearId,
+            activeMonthId,
+            activeWeek
+          );
+          return { id: s.id, weekScore: d.score };
+        });
+
+        // 2. Get Month Scores (from overviewStats which is already calculated)
+        const monthScores = overviewStats.map((s) => ({
+          id: s.id,
+          monthScore: s.currentMonthAvg,
+        }));
+
+        // 3. Combine & Filter
+        penaltySource = studentList.map((s) => {
+          const w = weekScores.find((x) => x.id === s.id)?.weekScore || 80;
+          const m = monthScores.find((x) => x.id === s.id)?.monthScore || 80;
+
+          let isPenalized = false;
+          let reason = "";
+
+          if (config.cleaningScoreBasis === "week" && w < 81) {
+            isPenalized = true;
+            reason = `Tuần ${w}đ`;
+          } else if (config.cleaningScoreBasis === "month" && m < 81) {
+            isPenalized = true;
+            reason = `Tháng ${m.toFixed(1)}đ`;
+          } else if (config.cleaningScoreBasis === "both") {
+            if (w < 81 || m < 81) {
+              isPenalized = true;
+              reason = `(Tuần ${w}đ, Tháng ${m.toFixed(1)}đ)`;
+            }
+          }
+
+          return { ...s, isPenalized, reason, sortScore: Math.min(w, m) };
+        });
+
+        pool = penaltySource
+          .filter((s) => s.isPenalized)
+          .sort((a, b) => a.sortScore - b.sortScore);
       } else {
-        // Default: STT Rotation
         const normalList = [...studentList].sort((a, b) => a.stt - b.stt);
         let currentIndex = normalList.findIndex(
           (s) => s.stt === config.cleaningStartStt
         );
         if (currentIndex === -1) currentIndex = 0;
-        // Reorder list starting from index
         pool = [
           ...normalList.slice(currentIndex),
           ...normalList.slice(0, currentIndex),
         ];
-        // For STT mode, take 12 people (default 2 per day) or more if list is long?
-        // Let's take first 12 for simplicity, or just use the whole pool for distribution
-        // Actually, user wants to cycle. So taking 12 is good.
-        pool = pool.slice(0, 13); // Take slightly more to handle odd numbers
       }
 
       if (pool.length === 0)
         return alert("Không tìm thấy học sinh nào phù hợp điều kiện!");
 
-      // B. Distribute Algorithm (Even Distribution)
-      // We have 6 days. We need to distribute `pool` into 6 buckets.
-      let currentIdx = 0;
+      const minSlotsNeeded = pool.length;
+      const standardSlots = 6 * config.cleaningPerDay;
+      const totalSlotsToFill = Math.max(minSlotsNeeded, standardSlots);
+
+      let finalRoster = [];
+      let poolIndex = 0;
+      for (let i = 0; i < totalSlotsToFill; i++) {
+        if (poolIndex >= pool.length) poolIndex = 0;
+        finalRoster.push(pool[poolIndex]);
+        poolIndex++;
+      }
+
+      let currentRosterIdx = 0;
       days.forEach((day, i) => {
-        // Logic: We have `pool.length - currentIdx` students left to assign to `6 - i` days.
-        // Students for today = Ceil(Students Left / Days Left)
-        // Example: 13 students, 6 days.
-        // Mon: Ceil(13/6) = 3. Left 10, Days 5.
-        // Tue: Ceil(10/5) = 2. Left 8, Days 4.
-        // Wed: Ceil(8/4) = 2. Left 6, Days 3.
-        // ...
-        const studentsLeft = pool.length - currentIdx;
+        const itemsLeft = finalRoster.length - currentRosterIdx;
         const daysLeft = 6 - i;
-        const countForToday = Math.ceil(studentsLeft / daysLeft);
+        const countForToday = Math.ceil(itemsLeft / daysLeft);
 
         const dailyGroup = [];
         for (let k = 0; k < countForToday; k++) {
-          if (pool[currentIdx]) {
-            dailyGroup.push(pool[currentIdx]);
-            currentIdx++;
+          if (finalRoster[currentRosterIdx]) {
+            dailyGroup.push(finalRoster[currentRosterIdx]);
+            currentRosterIdx++;
           }
         }
 
-        const names = dailyGroup.map((s) => `${s.name}`).join(" & ");
-        content += `📅 ${day}: ${names}\n`;
+        const names = dailyGroup
+          .map((s) => {
+            let suffix = "";
+            if (config.cleaningSource === "penalty" && s.reason) {
+              suffix = ` ${s.reason}`;
+            }
+            return `${s.name}${suffix}`;
+          })
+          .join("\n- ");
+
+        content += `📅 ${day}:\n- ${names}\n\n`;
       });
 
+      content += `(Tổng cộng: ${finalRoster.length} lượt trực)`;
       content += "\nCác bạn nhớ hoàn thành nhiệm vụ nhé! 💪";
     } else if (config.mode === "remind") {
-      // CHẾ ĐỘ NHẮC NHỞ (UPDATED: Selected Managers)
       title = "📢 Nhắc nhở Ban Cán Sự";
-      // Filter managers based on selection
       const targetManagers = Object.values(users).filter(
         (u) =>
           u.role === ROLES.MANAGER && config.targetManagerIds?.includes(u.id)
       );
-
       if (targetManagers.length === 0)
         return alert("Vui lòng chọn ít nhất 1 tổ trưởng để nhắc!");
-
+      const tags = targetManagers
+        .map((m) => `@${m.name} (Tổ ${m.group})`)
+        .join(" ");
       content = `🔔 Yêu cầu các bạn Tổ trưởng: \n${targetManagers
         .map((m) => `- ${m.name}`)
         .join(
           "\n"
-        )}\n\nNhanh chóng hoàn thành việc chấm điểm và rà soát nề nếp tuần này. Xin cảm ơn!`;
+        )}\n\nNhanh chóng hoàn thành việc chấm điểm và rà soát nề nếp tuần này.\n\nCC: ${tags}`;
     } else {
-      // CHẾ ĐỘ BÁO CÁO (TUẦN HOẶC THÁNG)
       const isWeekMode = config.mode === "week";
       title = isWeekMode
         ? `🤖 Báo cáo Tuần ${activeWeek}`
         : `🤖 Báo cáo Tháng ${activeMonthId}`;
-
       let reportData = [];
       if (isWeekMode) {
         reportData = studentList.map((s) => {
