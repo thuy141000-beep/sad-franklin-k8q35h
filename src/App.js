@@ -52,6 +52,10 @@ import {
   MessageSquare,
   Send,
   Megaphone,
+  Bot,
+  Zap,
+  Broom,
+  HelpCircle,
 } from "lucide-react";
 
 // --- FIREBASE SETUP ---
@@ -68,7 +72,7 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 const appId = "lop12-4-2025";
-const DATA_VERSION = "classData_v13"; // Giữ nguyên để dùng lại dữ liệu cũ
+const DATA_VERSION = "classData_v13";
 
 // --- CONSTANTS ---
 const ROLES = {
@@ -93,12 +97,29 @@ const DEFAULT_MANAGER_PERMISSIONS = {
   allowMoveGroup: false,
   allowBulkActions: false,
   allowCustomMode: false,
+  allowReceiveNotis: false,
 };
 
 const DEFAULT_PERMISSIONS = {
   canManageUsers: false,
   canManageRules: false,
   canResetPin: false,
+};
+
+// CẤU HÌNH MẶC ĐỊNH CHO BOT
+const DEFAULT_BOT_CONFIG = {
+  enabled: true,
+  mode: "week",
+  minScoreToPraise: 90,
+  minFineToWarn: 20000,
+
+  // Cấu hình trực nhật
+  cleaningSource: "stt", // 'stt', 'group', 'penalty'
+  cleaningStartStt: 1,
+  cleaningTargetGroup: 1,
+
+  // Cấu hình nhắc nhở
+  targetManagerIds: [], // Danh sách ID tổ trưởng cần nhắc
 };
 
 const FIXED_MONTHS = Array.from({ length: 12 }, (_, i) => ({
@@ -233,8 +254,297 @@ const formatDate = (timestamp) => {
 
 // --- COMPONENTS ---
 
-// 1. Notice Board Component
-const NoticeBoard = ({ notices, currentUser, onSave, onDelete }) => {
+const HelpModal = ({ role, onClose }) => {
+  const guides = {
+    [ROLES.TEACHER]: [
+      "🔒 Khóa/Mở tháng: Bấm icon ổ khóa.",
+      "⚙️ Cấp quyền: Vào tab Nhân sự -> Cài đặt.",
+      "🤖 Bot: Dùng để tự động đăng báo cáo hoặc xếp lịch trực nhật.",
+      "📢 Cấp quyền Bot/Thông báo: Vào tab Nhân sự, bấm icon Loa hoặc Robot.",
+    ],
+    [ROLES.ADMIN]: [
+      "📝 Chấm điểm: Chọn tab Chấm điểm.",
+      "✏️ Sửa lỗi: Dùng chế độ 'Chọn nhiều' hoặc bấm 'Tùy chỉnh'.",
+      "📢 Thông báo: Đăng thông báo nhắc nhở cả lớp.",
+      "🔑 Đổi PIN: Hỗ trợ các bạn đổi lại mã PIN.",
+    ],
+    [ROLES.MANAGER]: [
+      "👥 Quản lý tổ: Chấm điểm thành viên tổ mình.",
+      "⚠️ Lưu ý: Chỉ sửa được lỗi tháng chưa khóa.",
+      "📨 Thông báo: Nhận thông báo khi thành viên bị trừ điểm (nếu được cấp quyền).",
+    ],
+    [ROLES.STUDENT]: [
+      "👀 Xem điểm: Vào tab Chấm điểm.",
+      "💰 Xem quỹ: Vào tab Tài chính.",
+      "📢 Thông báo: Theo dõi bảng tin.",
+    ],
+  };
+  const currentGuide = guides[role] || guides[ROLES.STUDENT];
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm animate-slideDown">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="font-bold text-lg text-indigo-900 flex items-center gap-2">
+            <HelpCircle size={24} /> Hướng dẫn sử dụng
+          </h3>
+          <button onClick={onClose}>
+            <X size={20} className="text-gray-400" />
+          </button>
+        </div>
+        <div className="space-y-3">
+          {currentGuide.map((text, idx) => (
+            <div key={idx} className="flex gap-3 items-start">
+              <div className="min-w-[6px] h-[6px] rounded-full bg-indigo-500 mt-2"></div>
+              <p className="text-sm text-gray-600 leading-relaxed">{text}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// 2. Bot Configuration Modal (Nâng cấp logic chọn người)
+const BotConfigModal = ({
+  config = DEFAULT_BOT_CONFIG,
+  onClose,
+  onSave,
+  onRun,
+  activeMonthId,
+  activeWeek,
+  users,
+}) => {
+  const [localConfig, setLocalConfig] = useState({
+    ...DEFAULT_BOT_CONFIG,
+    ...config,
+  });
+  const managers = Object.values(users)
+    .filter((u) => u.role === ROLES.MANAGER)
+    .sort((a, b) => a.group - b.group);
+
+  // Xử lý chọn tổ trưởng để nhắc
+  const toggleManagerSelection = (id) => {
+    const current = localConfig.targetManagerIds || [];
+    const next = current.includes(id)
+      ? current.filter((cid) => cid !== id)
+      : [...current, id];
+    setLocalConfig({ ...localConfig, targetManagerIds: next });
+  };
+
+  // Chọn mặc định tất cả tổ trưởng nếu chưa có
+  useEffect(() => {
+    if (
+      !localConfig.targetManagerIds ||
+      localConfig.targetManagerIds.length === 0
+    ) {
+      setLocalConfig((prev) => ({
+        ...prev,
+        targetManagerIds: managers.map((m) => m.id),
+      }));
+    }
+  }, []);
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-xs animate-slideDown max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center gap-2 mb-4 text-indigo-900">
+          <Bot size={24} />
+          <h3 className="font-bold text-lg">Trợ lý ảo Bot</h3>
+        </div>
+
+        <div className="space-y-4 mb-6">
+          <div>
+            <label className="block text-xs font-bold text-gray-600 mb-1">
+              Chế độ hoạt động
+            </label>
+            <select
+              className="w-full p-2 border rounded font-medium text-indigo-700"
+              value={localConfig.mode}
+              onChange={(e) =>
+                setLocalConfig({ ...localConfig, mode: e.target.value })
+              }
+            >
+              <option value="week">📅 Báo cáo Tuần {activeWeek}</option>
+              <option value="month">📊 Tổng kết Tháng {activeMonthId}</option>
+              <option value="cleaning">🧹 Xếp lịch Trực nhật</option>
+              <option value="remind">🔔 Nhắc nhở Tổ trưởng</option>
+            </select>
+          </div>
+
+          {(localConfig.mode === "week" || localConfig.mode === "month") && (
+            <>
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">
+                  Điểm khen thưởng ( &ge; )
+                </label>
+                <input
+                  type="number"
+                  className="w-full p-2 border rounded"
+                  value={localConfig.minScoreToPraise}
+                  onChange={(e) =>
+                    setLocalConfig({
+                      ...localConfig,
+                      minScoreToPraise: Number(e.target.value),
+                    })
+                  }
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">
+                  Tiền phạt cảnh báo ( &ge; )
+                </label>
+                <input
+                  type="number"
+                  className="w-full p-2 border rounded"
+                  value={localConfig.minFineToWarn}
+                  onChange={(e) =>
+                    setLocalConfig({
+                      ...localConfig,
+                      minFineToWarn: Number(e.target.value),
+                    })
+                  }
+                />
+              </div>
+            </>
+          )}
+
+          {/* Cấu hình Trực nhật Nâng cao */}
+          {localConfig.mode === "cleaning" && (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">
+                  Nguồn nhân sự:
+                </label>
+                <select
+                  className="w-full p-2 border rounded text-sm"
+                  value={localConfig.cleaningSource}
+                  onChange={(e) =>
+                    setLocalConfig({
+                      ...localConfig,
+                      cleaningSource: e.target.value,
+                    })
+                  }
+                >
+                  <option value="stt">Theo STT (Xoay vòng)</option>
+                  <option value="group">Theo Tổ</option>
+                  <option value="penalty">
+                    Theo Danh sách Phạt (&lt; 81đ)
+                  </option>
+                </select>
+              </div>
+
+              {localConfig.cleaningSource === "group" && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">
+                    Chọn Tổ:
+                  </label>
+                  <select
+                    className="w-full p-2 border rounded text-sm"
+                    value={localConfig.cleaningTargetGroup}
+                    onChange={(e) =>
+                      setLocalConfig({
+                        ...localConfig,
+                        cleaningTargetGroup: Number(e.target.value),
+                      })
+                    }
+                  >
+                    {[1, 2, 3, 4].map((g) => (
+                      <option key={g} value={g}>
+                        Tổ {g}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {localConfig.cleaningSource === "stt" && (
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">
+                    Bắt đầu từ STT:
+                  </label>
+                  <input
+                    type="number"
+                    className="w-full p-2 border rounded"
+                    value={localConfig.cleaningStartStt}
+                    onChange={(e) =>
+                      setLocalConfig({
+                        ...localConfig,
+                        cleaningStartStt: Number(e.target.value),
+                      })
+                    }
+                    placeholder="Ví dụ: 1"
+                  />
+                </div>
+              )}
+
+              <p className="text-[10px] text-gray-400 italic">
+                Bot sẽ tự động chia đều số lượng thành viên cho 6 ngày (T2-T7).
+              </p>
+            </div>
+          )}
+
+          {/* Chế độ nhắc nhở: Chọn đích danh */}
+          {localConfig.mode === "remind" && (
+            <div className="space-y-2">
+              <p className="text-xs font-bold text-gray-600">
+                Chọn Tổ trưởng cần nhắc:
+              </p>
+              <div className="max-h-32 overflow-y-auto border rounded p-2 bg-gray-50">
+                {managers.map((m) => (
+                  <label
+                    key={m.id}
+                    className="flex items-center gap-2 text-sm py-1 cursor-pointer hover:bg-gray-100"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={localConfig.targetManagerIds?.includes(m.id)}
+                      onChange={() => toggleManagerSelection(m.id)}
+                      className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    />
+                    <span>
+                      {m.name} (Tổ {m.group})
+                    </span>
+                  </label>
+                ))}
+              </div>
+              <p className="text-[10px] text-blue-500">
+                Đã chọn: {localConfig.targetManagerIds?.length || 0} người
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <button
+            onClick={() => {
+              onSave(localConfig);
+              onRun(localConfig);
+            }}
+            className="w-full py-2 bg-indigo-600 text-white rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-indigo-700"
+          >
+            <Zap size={18} /> Thực hiện ngay
+          </button>
+          <button
+            onClick={onClose}
+            className="w-full py-2 text-gray-500 hover:bg-gray-100 rounded-lg text-sm"
+          >
+            Đóng
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// 2. Notice Board Component
+const NoticeBoard = ({
+  notices,
+  currentUser,
+  onSave,
+  onDelete,
+  onOpenBot,
+  canRunBot,
+}) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({ title: "", content: "" });
@@ -247,7 +557,6 @@ const NoticeBoard = ({ notices, currentUser, onSave, onDelete }) => {
   const handleSubmit = () => {
     if (!formData.title || !formData.content)
       return alert("Vui lòng nhập đủ tiêu đề và nội dung!");
-
     const newNotice = {
       id: editingId || Date.now(),
       title: formData.title,
@@ -255,8 +564,8 @@ const NoticeBoard = ({ notices, currentUser, onSave, onDelete }) => {
       date: Date.now(),
       author: currentUser.name,
       role: currentUser.role,
+      isBot: false,
     };
-
     onSave(newNotice);
     setIsEditing(false);
     setEditingId(null);
@@ -268,7 +577,6 @@ const NoticeBoard = ({ notices, currentUser, onSave, onDelete }) => {
     setFormData({ title: notice.title, content: notice.content });
     setIsEditing(true);
   };
-
   const handleDelete = (id) => {
     if (confirm("Bạn có chắc muốn xóa thông báo này?")) {
       onDelete(id);
@@ -277,60 +585,66 @@ const NoticeBoard = ({ notices, currentUser, onSave, onDelete }) => {
 
   return (
     <div className="fade-in space-y-4">
-      {canPost && (
-        <div className="bg-white rounded-xl shadow-sm p-4 border border-indigo-100">
-          {!isEditing ? (
+      <div className="flex gap-2">
+        {canPost && !isEditing && (
+          <button
+            onClick={() => setIsEditing(true)}
+            className="flex-1 py-3 bg-white border border-indigo-100 shadow-sm text-indigo-600 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-indigo-50 transition-colors"
+          >
+            <Plus size={20} /> Viết thông báo
+          </button>
+        )}
+        {canRunBot && !isEditing && (
+          <button
+            onClick={onOpenBot}
+            className="px-4 py-3 bg-gradient-to-r from-purple-500 to-indigo-500 text-white rounded-xl font-bold flex items-center justify-center gap-2 shadow-md hover:opacity-90 transition-opacity"
+          >
+            <Bot size={20} /> Bot
+          </button>
+        )}
+      </div>
+      {isEditing && (
+        <div className="bg-white rounded-xl shadow-sm p-4 border border-indigo-100 animate-slideDown">
+          <h3 className="font-bold text-gray-800 mb-3">
+            {editingId ? "Chỉnh sửa" : "Bài viết mới"}
+          </h3>
+          <input
+            className="w-full p-2 border rounded text-sm font-bold mb-2"
+            placeholder="Tiêu đề..."
+            value={formData.title}
+            onChange={(e) =>
+              setFormData({ ...formData, title: e.target.value })
+            }
+            autoFocus
+          />
+          <textarea
+            className="w-full p-2 border rounded text-sm h-24 mb-2"
+            placeholder="Nội dung..."
+            value={formData.content}
+            onChange={(e) =>
+              setFormData({ ...formData, content: e.target.value })
+            }
+          />
+          <div className="flex gap-2 justify-end">
             <button
-              onClick={() => setIsEditing(true)}
-              className="w-full py-3 bg-indigo-50 text-indigo-600 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-indigo-100 transition-colors"
+              onClick={() => {
+                setIsEditing(false);
+                setEditingId(null);
+                setFormData({ title: "", content: "" });
+              }}
+              className="px-4 py-2 bg-gray-100 text-gray-600 rounded text-sm font-bold"
             >
-              <Plus size={20} /> Tạo thông báo mới
+              Hủy
             </button>
-          ) : (
-            <div className="space-y-3 animate-slideDown">
-              <h3 className="font-bold text-gray-800">
-                {editingId ? "Chỉnh sửa thông báo" : "Thông báo mới"}
-              </h3>
-              <input
-                className="w-full p-2 border rounded text-sm font-bold"
-                placeholder="Tiêu đề (Ví dụ: Lịch nghỉ học, Nộp quỹ...)"
-                value={formData.title}
-                onChange={(e) =>
-                  setFormData({ ...formData, title: e.target.value })
-                }
-                autoFocus
-              />
-              <textarea
-                className="w-full p-2 border rounded text-sm h-24"
-                placeholder="Nội dung chi tiết..."
-                value={formData.content}
-                onChange={(e) =>
-                  setFormData({ ...formData, content: e.target.value })
-                }
-              />
-              <div className="flex gap-2 justify-end">
-                <button
-                  onClick={() => {
-                    setIsEditing(false);
-                    setEditingId(null);
-                    setFormData({ title: "", content: "" });
-                  }}
-                  className="px-4 py-2 bg-gray-100 text-gray-600 rounded text-sm font-bold"
-                >
-                  Hủy
-                </button>
-                <button
-                  onClick={handleSubmit}
-                  className="px-4 py-2 bg-indigo-600 text-white rounded text-sm font-bold flex items-center gap-1"
-                >
-                  <Send size={14} /> Đăng
-                </button>
-              </div>
-            </div>
-          )}
+            <button
+              onClick={handleSubmit}
+              className="px-4 py-2 bg-indigo-600 text-white rounded text-sm font-bold flex items-center gap-1"
+            >
+              <Send size={14} /> Đăng
+            </button>
+          </div>
         </div>
       )}
-
       <div className="space-y-3">
         {notices && notices.length > 0 ? (
           notices
@@ -338,19 +652,28 @@ const NoticeBoard = ({ notices, currentUser, onSave, onDelete }) => {
             .map((notice) => (
               <div
                 key={notice.id}
-                className="bg-white rounded-xl shadow-sm p-4 border-l-4 border-indigo-500 relative group"
+                className={`bg-white rounded-xl shadow-sm p-4 border-l-4 relative group ${
+                  notice.isBot ? "border-purple-500" : "border-blue-500"
+                }`}
               >
                 <div className="flex justify-between items-start mb-2">
                   <div>
-                    <h4 className="font-bold text-gray-800 text-lg">
-                      {notice.title}
-                    </h4>
+                    <div className="flex items-center gap-2">
+                      {notice.isBot && (
+                        <Bot size={16} className="text-purple-600" />
+                      )}
+                      <h4 className="font-bold text-gray-800 text-lg">
+                        {notice.title}
+                      </h4>
+                    </div>
                     <p className="text-xs text-gray-400 flex items-center gap-1">
-                      {formatDate(notice.date)} •
+                      {formatDate(notice.date)} •{" "}
                       <span
                         className={`font-bold ${
-                          notice.role === ROLES.TEACHER
+                          notice.isBot
                             ? "text-purple-600"
+                            : notice.role === ROLES.TEACHER
+                            ? "text-indigo-600"
                             : "text-blue-600"
                         }`}
                       >
@@ -360,12 +683,14 @@ const NoticeBoard = ({ notices, currentUser, onSave, onDelete }) => {
                   </div>
                   {canPost && (
                     <div className="flex gap-2">
-                      <button
-                        onClick={() => handleEdit(notice)}
-                        className="text-gray-400 hover:text-blue-600"
-                      >
-                        <Edit3 size={16} />
-                      </button>
+                      {!notice.isBot && (
+                        <button
+                          onClick={() => handleEdit(notice)}
+                          className="text-gray-400 hover:text-blue-600"
+                        >
+                          <Edit3 size={16} />
+                        </button>
+                      )}
                       <button
                         onClick={() => handleDelete(notice.id)}
                         className="text-gray-400 hover:text-red-600"
@@ -391,18 +716,20 @@ const NoticeBoard = ({ notices, currentUser, onSave, onDelete }) => {
   );
 };
 
-// 2. Modal Sửa Đồng Loạt
+// ... (Giữ nguyên Modal: BulkEdit, CustomRule, BatchUpdate, ChangePassword, UserEdit, LoginScreen) ...
 const BulkEditModal = ({ count, onClose, onConfirm, onDelete }) => {
   const [points, setPoints] = useState(0);
   const [fine, setFine] = useState(0);
-
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      {" "}
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-xs animate-slideDown">
+        {" "}
         <h3 className="font-bold text-indigo-900 mb-2">
           Sửa {count} lỗi đang chọn
-        </h3>
+        </h3>{" "}
         <div className="space-y-3 mb-4">
+          {" "}
           <div>
             <label className="text-xs font-bold text-gray-600">
               Điểm mới (+/-)
@@ -413,7 +740,7 @@ const BulkEditModal = ({ count, onClose, onConfirm, onDelete }) => {
               value={points}
               onChange={(e) => setPoints(Number(e.target.value))}
             />
-          </div>
+          </div>{" "}
           <div>
             <label className="text-xs font-bold text-gray-600">
               Tiền phạt mới (VNĐ)
@@ -424,8 +751,8 @@ const BulkEditModal = ({ count, onClose, onConfirm, onDelete }) => {
               value={fine}
               onChange={(e) => setFine(Number(e.target.value))}
             />
-          </div>
-        </div>
+          </div>{" "}
+        </div>{" "}
         <div className="flex flex-col gap-2">
           <button
             onClick={() => onConfirm(points, fine)}
@@ -445,23 +772,24 @@ const BulkEditModal = ({ count, onClose, onConfirm, onDelete }) => {
           >
             Hủy
           </button>
-        </div>
-      </div>
+        </div>{" "}
+      </div>{" "}
     </div>
   );
 };
-
 const CustomRuleModal = ({ rule, onClose, onConfirm }) => {
   const [customPoints, setCustomPoints] = useState(rule.points);
   const [customFine, setCustomFine] = useState(rule.fine);
-
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      {" "}
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-xs animate-slideDown">
+        {" "}
         <h3 className="font-bold text-gray-800 mb-2">
           Tùy chỉnh: {rule.label}
-        </h3>
+        </h3>{" "}
         <div className="space-y-3">
+          {" "}
           <div>
             <label className="text-xs font-bold text-gray-600">
               Điểm (+/-)
@@ -472,7 +800,7 @@ const CustomRuleModal = ({ rule, onClose, onConfirm }) => {
               value={customPoints}
               onChange={(e) => setCustomPoints(Number(e.target.value))}
             />
-          </div>
+          </div>{" "}
           <div>
             <label className="text-xs font-bold text-gray-600">
               Tiền (VNĐ)
@@ -483,7 +811,7 @@ const CustomRuleModal = ({ rule, onClose, onConfirm }) => {
               value={customFine}
               onChange={(e) => setCustomFine(Number(e.target.value))}
             />
-          </div>
+          </div>{" "}
           <div className="flex gap-2 mt-2">
             <button
               onClick={onClose}
@@ -497,14 +825,12 @@ const CustomRuleModal = ({ rule, onClose, onConfirm }) => {
             >
               Áp dụng
             </button>
-          </div>
-        </div>
-      </div>
+          </div>{" "}
+        </div>{" "}
+      </div>{" "}
     </div>
   );
 };
-
-// 3. Batch Update Modal
 const BatchUpdateModal = ({ months, onConfirm, onClose, isBulk }) => {
   const [selectedMonths, setSelectedMonths] = useState([]);
   const toggleMonth = (id) =>
@@ -515,18 +841,20 @@ const BatchUpdateModal = ({ months, onConfirm, onClose, isBulk }) => {
     selectedMonths.length === months.length
       ? setSelectedMonths([])
       : setSelectedMonths(months.map((m) => m.id));
-
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      {" "}
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm animate-slideDown">
+        {" "}
         <h3 className="font-bold text-indigo-900 mb-2">
           {isBulk ? "Đồng bộ tất cả thay đổi?" : "Cập nhật đồng bộ?"}
-        </h3>
+        </h3>{" "}
         <p className="text-sm text-gray-600 mb-4">
           Bạn vừa sửa {isBulk ? "danh sách" : "nội quy"}. Chọn các tháng bạn
           muốn áp dụng mức phạt mới này cho các lỗi cũ:
-        </p>
+        </p>{" "}
         <div className="mb-4 max-h-60 overflow-y-auto border rounded p-2 bg-gray-50">
+          {" "}
           <div className="flex items-center gap-2 mb-2 border-b pb-2">
             <input
               type="checkbox"
@@ -535,7 +863,7 @@ const BatchUpdateModal = ({ months, onConfirm, onClose, isBulk }) => {
               className="w-4 h-4"
             />
             <span className="font-bold text-sm">Chọn tất cả</span>
-          </div>
+          </div>{" "}
           <div className="grid grid-cols-3 gap-2">
             {months.map((m) => (
               <label
@@ -551,8 +879,8 @@ const BatchUpdateModal = ({ months, onConfirm, onClose, isBulk }) => {
                 <span className="text-xs">{m.name}</span>
               </label>
             ))}
-          </div>
-        </div>
+          </div>{" "}
+        </div>{" "}
         <div className="flex gap-2">
           <button
             onClick={() => onConfirm([])}
@@ -569,18 +897,16 @@ const BatchUpdateModal = ({ months, onConfirm, onClose, isBulk }) => {
           >
             Đồng bộ ngay
           </button>
-        </div>
-      </div>
+        </div>{" "}
+      </div>{" "}
     </div>
   );
 };
-
 const ChangePasswordModal = ({ user, onClose, onSave }) => {
   const [oldPin, setOldPin] = useState("");
   const [newPin, setNewPin] = useState("");
   const [confirmPin, setConfirmPin] = useState("");
   const [error, setError] = useState("");
-
   const handleSubmit = () => {
     if (oldPin !== user.pin) return setError("Mã PIN cũ không đúng");
     if (newPin.length < 4)
@@ -588,13 +914,14 @@ const ChangePasswordModal = ({ user, onClose, onSave }) => {
     if (newPin !== confirmPin) return setError("Xác nhận mã PIN không khớp");
     onSave(newPin);
   };
-
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      {" "}
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm">
+        {" "}
         <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
           <Lock size={20} className="text-indigo-600" /> Đổi mật khẩu
-        </h3>
+        </h3>{" "}
         <div className="space-y-3">
           <input
             type="password"
@@ -632,12 +959,11 @@ const ChangePasswordModal = ({ user, onClose, onSave }) => {
               Lưu
             </button>
           </div>
-        </div>
-      </div>
+        </div>{" "}
+      </div>{" "}
     </div>
   );
 };
-
 const UserEditModal = ({ targetUser, currentUser, onSave, onClose }) => {
   const [formData, setFormData] = useState({
     name: targetUser.name,
@@ -645,33 +971,32 @@ const UserEditModal = ({ targetUser, currentUser, onSave, onClose }) => {
     group: targetUser.group,
     role: targetUser.role,
   });
-
   const isTeacher = currentUser.role === ROLES.TEACHER;
   const canEditRole =
     isTeacher ||
     (currentUser.role === ROLES.ADMIN && targetUser.role !== ROLES.TEACHER);
-
   const availableRoles = [
     ROLES.STUDENT,
     ROLES.MANAGER,
     ROLES.ADMIN,
     ...(isTeacher ? [ROLES.TEACHER] : []),
   ];
-
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
-
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      {" "}
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm animate-slideDown">
+        {" "}
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-bold text-gray-800">Sửa thông tin</h3>
           <button onClick={onClose}>
             <X size={20} className="text-gray-400" />
           </button>
-        </div>
+        </div>{" "}
         <div className="space-y-3">
+          {" "}
           <div>
             <label className="text-xs font-medium text-gray-500">
               Họ và tên
@@ -681,8 +1006,9 @@ const UserEditModal = ({ targetUser, currentUser, onSave, onClose }) => {
               value={formData.name}
               onChange={(e) => handleChange("name", e.target.value)}
             />
-          </div>
+          </div>{" "}
           <div className="flex gap-2">
+            {" "}
             <div className="w-1/3">
               <label className="text-xs font-medium text-gray-500">STT</label>
               <input
@@ -691,7 +1017,7 @@ const UserEditModal = ({ targetUser, currentUser, onSave, onClose }) => {
                 value={formData.stt}
                 onChange={(e) => handleChange("stt", e.target.value)}
               />
-            </div>
+            </div>{" "}
             <div className="w-2/3">
               <label className="text-xs font-medium text-gray-500">Tổ</label>
               <select
@@ -705,8 +1031,8 @@ const UserEditModal = ({ targetUser, currentUser, onSave, onClose }) => {
                   </option>
                 ))}
               </select>
-            </div>
-          </div>
+            </div>{" "}
+          </div>{" "}
           {canEditRole && (
             <div>
               <label className="text-xs font-medium text-gray-500">
@@ -724,8 +1050,8 @@ const UserEditModal = ({ targetUser, currentUser, onSave, onClose }) => {
                 ))}
               </select>
             </div>
-          )}
-        </div>
+          )}{" "}
+        </div>{" "}
         <div className="flex gap-2 mt-6">
           <button
             onClick={onClose}
@@ -739,38 +1065,33 @@ const UserEditModal = ({ targetUser, currentUser, onSave, onClose }) => {
           >
             Lưu
           </button>
-        </div>
-      </div>
+        </div>{" "}
+      </div>{" "}
     </div>
   );
 };
-
 const LoginScreen = ({ dbState, onLogin }) => {
   const [activeTab, setActiveTab] = useState("student");
   const [selectedUser, setSelectedUser] = useState(null);
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [searchStudent, setSearchStudent] = useState("");
-
-  const getSortedList = (roleFilter) => {
-    return Object.values(dbState.users)
+  const getSortedList = (roleFilter) =>
+    Object.values(dbState.users)
       .filter((u) => u.role === roleFilter)
       .sort((a, b) => (a.stt || 999) - (b.stt || 999));
-  };
-
   const admins = Object.values(dbState.users).filter(
     (u) => u.role === ROLES.TEACHER || u.role === ROLES.ADMIN
   );
   const managers = getSortedList(ROLES.MANAGER);
   const students = getSortedList(ROLES.STUDENT);
-
   const handleLogin = () => {
     if (selectedUser && pin === selectedUser.pin) onLogin(selectedUser);
     else setError("Mã PIN không chính xác");
   };
-
   const renderUserList = (list) => (
     <div className="grid grid-cols-2 gap-3 max-h-60 overflow-y-auto">
+      {" "}
       {list
         .filter((u) =>
           u.name.toLowerCase().includes(searchStudent.toLowerCase())
@@ -789,6 +1110,7 @@ const LoginScreen = ({ dbState, onLogin }) => {
                 : "border-gray-200 hover:bg-gray-50"
             }`}
           >
+            {" "}
             <div
               className={`p-2 rounded-full ${
                 user.role === ROLES.TEACHER
@@ -800,6 +1122,7 @@ const LoginScreen = ({ dbState, onLogin }) => {
                   : "bg-gray-100 text-gray-600"
               }`}
             >
+              {" "}
               {user.role === ROLES.TEACHER ? (
                 <School size={20} />
               ) : user.role === ROLES.ADMIN ? (
@@ -808,8 +1131,8 @@ const LoginScreen = ({ dbState, onLogin }) => {
                 <UserCheck size={20} />
               ) : (
                 <User size={20} />
-              )}
-            </div>
+              )}{" "}
+            </div>{" "}
             <div className="text-center">
               <span className="font-medium text-sm text-gray-700 block truncate w-24">
                 {user.name}
@@ -819,24 +1142,27 @@ const LoginScreen = ({ dbState, onLogin }) => {
                   STT: {user.stt}
                 </span>
               )}
-            </div>
+            </div>{" "}
           </button>
-        ))}
+        ))}{" "}
     </div>
   );
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-600 to-indigo-500 p-4">
+      {" "}
       <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
+        {" "}
         <div className="text-center mb-6">
           <h1 className="text-2xl font-bold text-gray-800">
             Thống Kê Tình Hình Lớp 12/4
           </h1>
           <p className="text-gray-500 text-sm">By Banana</p>
-        </div>
+        </div>{" "}
         {!selectedUser ? (
           <>
+            {" "}
             <div className="flex border-b border-gray-200 mb-4">
+              {" "}
               <button
                 onClick={() => setActiveTab("student")}
                 className={`flex-1 pb-2 text-xs sm:text-sm font-medium ${
@@ -846,7 +1172,7 @@ const LoginScreen = ({ dbState, onLogin }) => {
                 }`}
               >
                 Học sinh
-              </button>
+              </button>{" "}
               <button
                 onClick={() => setActiveTab("manager")}
                 className={`flex-1 pb-2 text-xs sm:text-sm font-medium ${
@@ -856,7 +1182,7 @@ const LoginScreen = ({ dbState, onLogin }) => {
                 }`}
               >
                 Tổ trưởng
-              </button>
+              </button>{" "}
               <button
                 onClick={() => setActiveTab("admin")}
                 className={`flex-1 pb-2 text-xs sm:text-sm font-medium ${
@@ -866,8 +1192,8 @@ const LoginScreen = ({ dbState, onLogin }) => {
                 }`}
               >
                 Quản trị
-              </button>
-            </div>
+              </button>{" "}
+            </div>{" "}
             {activeTab === "student" && (
               <div className="mb-3 relative">
                 <Search
@@ -881,21 +1207,23 @@ const LoginScreen = ({ dbState, onLogin }) => {
                   onChange={(e) => setSearchStudent(e.target.value)}
                 />
               </div>
-            )}
-            {activeTab === "admin" && renderUserList(admins)}
-            {activeTab === "manager" && renderUserList(managers)}
-            {activeTab === "student" && renderUserList(students)}
+            )}{" "}
+            {activeTab === "admin" && renderUserList(admins)}{" "}
+            {activeTab === "manager" && renderUserList(managers)}{" "}
+            {activeTab === "student" && renderUserList(students)}{" "}
           </>
         ) : (
           <div className="space-y-5">
+            {" "}
             <div className="flex items-center gap-3 bg-indigo-50 p-3 rounded-lg">
+              {" "}
               <div className="bg-indigo-100 p-2 rounded-full">
                 {selectedUser.role === ROLES.TEACHER ? (
                   <School size={20} className="text-indigo-600" />
                 ) : (
                   <User size={20} className="text-indigo-600" />
                 )}
-              </div>
+              </div>{" "}
               <div>
                 <p className="font-bold text-gray-800 text-sm">
                   {selectedUser.name}
@@ -903,8 +1231,8 @@ const LoginScreen = ({ dbState, onLogin }) => {
                 <p className="text-xs text-gray-500 uppercase">
                   {selectedUser.role}
                 </p>
-              </div>
-            </div>
+              </div>{" "}
+            </div>{" "}
             <div>
               <label className="block text-xs font-medium text-gray-700 mb-2">
                 Nhập mã PIN
@@ -921,7 +1249,7 @@ const LoginScreen = ({ dbState, onLogin }) => {
               {error && (
                 <p className="text-red-500 text-xs mt-2 text-center">{error}</p>
               )}
-            </div>
+            </div>{" "}
             <div className="flex gap-3">
               <button
                 onClick={() => setSelectedUser(null)}
@@ -935,10 +1263,10 @@ const LoginScreen = ({ dbState, onLogin }) => {
               >
                 Đăng nhập
               </button>
-            </div>
+            </div>{" "}
           </div>
-        )}
-      </div>
+        )}{" "}
+      </div>{" "}
     </div>
   );
 };
@@ -948,7 +1276,7 @@ const AccountManager = ({
   updateData,
   currentUser,
   adminPermissions,
-  managerPermissions, // Nhận props này
+  managerPermissions,
 }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [editingUser, setEditingUser] = useState(null);
@@ -959,16 +1287,15 @@ const AccountManager = ({
     group: 1,
     role: ROLES.STUDENT,
   });
-
   const isTeacher = currentUser.role === ROLES.TEACHER;
   const isAdmin = currentUser.role === ROLES.ADMIN;
   const isManager = currentUser.role === ROLES.MANAGER;
-
+  const canManageUsers =
+    isTeacher || (isAdmin && adminPermissions.canManageUsers);
   const canAddUser =
     isTeacher ||
     (isAdmin && adminPermissions.canManageUsers) ||
     (isManager && managerPermissions.allowAdd);
-
   const checkManagerAction = (action) => {
     if (isTeacher || (isAdmin && adminPermissions.canManageUsers)) return true;
     if (isManager) {
@@ -978,32 +1305,28 @@ const AccountManager = ({
     }
     return false;
   };
-
   const handleSaveUser = (updatedData) => {
     const userId = editingUser.id;
     let userToUpdate = { ...users[userId], ...updatedData };
     updateData({ users: { ...users, [userId]: userToUpdate } });
     setEditingUser(null);
-    alert("Cập nhật thông tin thành công!");
+    alert("Cập nhật thành công!");
   };
-
   const handleDeleteUser = (userId) => {
-    if (window.confirm("Xóa vĩnh viễn thành viên này?")) {
+    if (window.confirm("Xóa thành viên?")) {
       const updatedUsers = { ...users };
       delete updatedUsers[userId];
       updateData({ users: updatedUsers });
     }
   };
-
   const handleResetPin = (user) => {
-    const newPin = prompt("Nhập mã PIN mới (4 số):", "0000");
+    const newPin = prompt("Nhập PIN mới (4 số):", "0000");
     if (newPin && newPin.length >= 4) {
       const updatedUsers = { ...users, [user.id]: { ...user, pin: newPin } };
       updateData({ users: updatedUsers });
-      alert("Đã đổi PIN thành công!");
+      alert("Đã đổi PIN!");
     }
   };
-
   const handleAddUser = () => {
     if (!newUser.name) return alert("Nhập tên");
     const id = `s_${Date.now()}`;
@@ -1018,9 +1341,8 @@ const AccountManager = ({
     updateData({ users: { ...users, [id]: newStudent } });
     setIsAdding(false);
     setNewUser({ name: "", stt: "", group: 1, role: ROLES.STUDENT });
-    alert("Đã thêm thành viên mới!");
+    alert("Đã thêm!");
   };
-
   const toggleUserNoticePermission = (userId) => {
     if (!isTeacher) return;
     const user = users[userId];
@@ -1029,19 +1351,24 @@ const AccountManager = ({
       users: { ...users, [userId]: { ...user, canPostNotices: newStatus } },
     });
   };
-
+  const toggleUserBotPermission = (userId) => {
+    if (!isTeacher) return;
+    const user = users[userId];
+    const newStatus = !user.canUseBot;
+    updateData({
+      users: { ...users, [userId]: { ...user, canUseBot: newStatus } },
+    });
+  }; // NEW: Toggle Bot Permission
   const toggleAdminPermission = (key) => {
     if (!isTeacher) return;
     const newPerms = { ...adminPermissions, [key]: !adminPermissions[key] };
     updateData({ adminPermissions: newPerms });
   };
-
   const toggleManagerPermission = (key) => {
     if (!isTeacher) return;
     const newPerms = { ...managerPermissions, [key]: !managerPermissions[key] };
     updateData({ managerPermissions: newPerms });
   };
-
   const displayedUsers = Object.values(users)
     .filter((u) => {
       if (!u.name.toLowerCase().includes(searchTerm.toLowerCase()))
@@ -1065,14 +1392,11 @@ const AccountManager = ({
           onSave={handleSaveUser}
         />
       )}
-
       {isTeacher && (
         <div className="bg-purple-50 p-4 border-b border-purple-100">
           <h3 className="font-bold text-purple-900 mb-3 flex items-center gap-2">
             <Settings size={18} /> Cấu hình quyền hạn
           </h3>
-
-          {/* ADMIN CONFIG */}
           <div className="mb-4">
             <h4 className="text-xs font-bold text-purple-700 uppercase mb-2">
               Quyền Lớp Trưởng (Admin)
@@ -1133,8 +1457,6 @@ const AccountManager = ({
               </div>
             </div>
           </div>
-
-          {/* MANAGER CONFIG (NEW) */}
           <div>
             <h4 className="text-xs font-bold text-blue-700 uppercase mb-2">
               Quyền Tổ Trưởng (Manager)
@@ -1242,6 +1564,23 @@ const AccountManager = ({
                   )}
                 </button>
               </div>
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100">
+                <span className="text-xs text-gray-700">Nhận Thông báo</span>
+                <button
+                  onClick={() => toggleManagerPermission("allowReceiveNotis")}
+                  className={
+                    managerPermissions.allowReceiveNotis
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {managerPermissions.allowReceiveNotis ? (
+                    <ToggleRight size={24} />
+                  ) : (
+                    <ToggleLeft size={24} />
+                  )}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -1263,7 +1602,6 @@ const AccountManager = ({
           </button>
         )}
       </div>
-
       {isAdding && (
         <div className="p-4 bg-blue-50 border-b border-blue-100 animate-slideDown">
           <h3 className="text-sm font-bold text-blue-800 mb-2">
@@ -1318,7 +1656,6 @@ const AccountManager = ({
           </div>
         </div>
       )}
-
       <div className="p-2 relative">
         <Search size={14} className="absolute left-5 top-5 text-gray-400" />
         <input
@@ -1331,10 +1668,8 @@ const AccountManager = ({
 
       <div className="max-h-[500px] overflow-y-auto p-2">
         {displayedUsers.map((user) => {
-          // Determine if current user can edit THIS user
           const isTargetStudent = user.role === ROLES.STUDENT;
           const isSameGroup = user.group === currentUser.group;
-
           const canEdit =
             isTeacher ||
             (isAdmin && adminPermissions.canManageUsers) ||
@@ -1395,19 +1730,34 @@ const AccountManager = ({
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {isTeacher && user.role === ROLES.STUDENT && (
-                  <button
-                    onClick={() => toggleUserNoticePermission(user.id)}
-                    className={`p-1.5 rounded ${
-                      user.canPostNotices
-                        ? "text-blue-600 bg-blue-50"
-                        : "text-gray-300 hover:bg-gray-100"
-                    }`}
-                    title="Cấp quyền Thông báo"
-                  >
-                    <Megaphone size={16} />
-                  </button>
-                )}
+                {isTeacher &&
+                  (user.role === ROLES.STUDENT ||
+                    user.role === ROLES.MANAGER) && (
+                    <>
+                      <button
+                        onClick={() => toggleUserNoticePermission(user.id)}
+                        className={`p-1.5 rounded ${
+                          user.canPostNotices
+                            ? "text-blue-600 bg-blue-50"
+                            : "text-gray-300 hover:bg-gray-100"
+                        }`}
+                        title="Quyền Thông báo"
+                      >
+                        <Megaphone size={16} />
+                      </button>
+                      <button
+                        onClick={() => toggleUserBotPermission(user.id)}
+                        className={`p-1.5 rounded ${
+                          user.canUseBot
+                            ? "text-purple-600 bg-purple-50"
+                            : "text-gray-300 hover:bg-gray-100"
+                        }`}
+                        title="Quyền Bot"
+                      >
+                        <Bot size={16} />
+                      </button>
+                    </>
+                  )}
                 {user.role !== ROLES.TEACHER && (
                   <>
                     {canEdit && (
@@ -1459,6 +1809,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     adminPermissions,
     managerPermissions = DEFAULT_MANAGER_PERMISSIONS,
     notices = [],
+    botConfig = DEFAULT_BOT_CONFIG,
   } = dbState;
 
   const [activeYearId, setActiveYearId] = useState(
@@ -1466,7 +1817,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
   );
   const [activeMonthId, setActiveMonthId] = useState(1);
   const [activeWeek, setActiveWeek] = useState(1);
-
   const [activeTab, setActiveTab] = useState(
     currentUser.role === ROLES.STUDENT ? "overview" : "input"
   );
@@ -1476,25 +1826,20 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
   const [selectedRuleForCustom, setSelectedRuleForCustom] = useState(null);
   const [selectedStudentForCustom, setSelectedStudentForCustom] =
     useState(null);
-
   const [batchUpdateModalOpen, setBatchUpdateModalOpen] = useState(false);
   const [pendingRuleUpdate, setPendingRuleUpdate] = useState(null);
   const [pendingBulkRulesUpdate, setPendingBulkRulesUpdate] = useState(null);
-
-  // --- BULK SELECT STATE ---
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedViolationKeys, setSelectedViolationKeys] = useState([]);
   const [bulkEditModalOpen, setBulkEditModalOpen] = useState(false);
-
-  // --- BULK RULES STATE ---
   const [isBulkRulesMode, setIsBulkRulesMode] = useState(false);
   const [tempRules, setTempRules] = useState([]);
-
   const [startMonth, setStartMonth] = useState(1);
   const [endMonth, setEndMonth] = useState(1);
   const [startYear, setStartYear] = useState(activeYearId);
   const [endYear, setEndYear] = useState(activeYearId);
-
+  const [botModalOpen, setBotModalOpen] = useState(false);
+  const [helpModalOpen, setHelpModalOpen] = useState(false); // Help Modal State
   const [newRule, setNewRule] = useState({
     label: "",
     fine: 0,
@@ -1513,27 +1858,23 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
   const canManageRules =
     isTeacher || (isAdmin && adminPermissions.canManageRules);
   const canEditMonths = isTeacher || isAdmin;
-
-  // === CHECK MANAGER PERMISSIONS HERE ===
-  // Logic: Teacher/Admin always true. Manager depends on setting. Student always false.
-  // FIX: Thêm biến này vào để check trong render
   const canUseBulk =
     isTeacher || isAdmin || (isManager && managerPermissions.allowBulkActions);
   const canUseCustom =
     isTeacher || isAdmin || (isManager && managerPermissions.allowCustomMode);
 
-  // FIX: Auto-create currentYearObj if missing
+  // Update Bot Permission: Teacher OR Admin OR User has canUseBot=true
+  const canRunBot = isTeacher || isAdmin || currentUser.canUseBot;
+
   const currentYearObj = years.find((y) => y.id === activeYearId) || {
     id: activeYearId,
     name: `${activeYearId}`,
     lockedMonths: [],
   };
-
   const safeMonths = FIXED_MONTHS.map((m) => ({
     ...m,
     isLocked: currentYearObj.lockedMonths?.includes(m.id) || false,
   }));
-
   const activeMonthLabel =
     activeMonthId === "ALL"
       ? "Cả Năm"
@@ -1553,7 +1894,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     .filter((u) => u.role === ROLES.STUDENT || u.role === ROLES.MANAGER)
     .sort((a, b) => a.stt - b.stt);
 
-  // --- STATS CALCULATION ---
   const classFundStats = useMemo(() => {
     let weekTotal = 0;
     let monthTotal = 0;
@@ -1585,7 +1925,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     return { weekTotal, monthTotal, yearTotal };
   }, [users, weeklyData, activeYearId, activeMonthId, activeWeek, safeMonths]);
 
-  // --- USER STATS ---
   const overviewStats = useMemo(() => {
     return studentList
       .map((student) => {
@@ -1595,14 +1934,12 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         let yearTotalFines = 0;
         const debtCarryOver = student.debtCarryOver || 0;
         yearTotalFines += debtCarryOver;
-
         safeMonths.forEach((m) => {
           for (let w = 1; w <= 4; w++) {
             const data = getStudentData(student.id, activeYearId, m.id, w);
             yearTotalFines += data.fines;
           }
         });
-
         if (activeMonthId === "ALL") {
           let totalScoreAllTime = 0;
           let totalWeeks = 0;
@@ -1647,11 +1984,9 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         let totalScore = 0;
         let totalFines = 0;
         let weeksCount = 0;
-
         let currentY = startYear;
         let currentM = startMonth;
         const endValue = endYear * 100 + endMonth;
-
         while (currentY * 100 + currentM <= endValue) {
           for (let w = 1; w <= 4; w++) {
             const data = getStudentData(student.id, currentY, currentM, w);
@@ -1665,12 +2000,10 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
             currentY++;
           }
         }
-
         const avgScore = weeksCount > 0 ? totalScore / weeksCount : 80;
         return { ...student, rangeAvg: avgScore, rangeFines: totalFines };
       })
       .sort((a, b) => b.rangeAvg - a.rangeAvg);
-
     if (isStudent) return results.filter((s) => s.id === currentUser.id);
     return results;
   }, [
@@ -1684,8 +2017,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     currentUser.id,
   ]);
 
-  // --- ACTIONS ---
-
   const handleChangeSelfPassword = (newPin) => {
     const updatedUsers = {
       ...users,
@@ -1696,7 +2027,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     alert("Đổi mật khẩu thành công!");
   };
 
-  // --- NOTICE ACTIONS ---
   const handleAddNotice = (newNotice) => {
     updateData({ notices: [newNotice, ...notices] });
   };
@@ -1709,6 +2039,159 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
   const handleDeleteNotice = (noticeId) => {
     const newNotices = notices.filter((n) => n.id !== noticeId);
     updateData({ notices: newNotices });
+  };
+
+  // --- BOT FUNCTION (UPDATED V21) ---
+  const handleRunBot = (config) => {
+    let content = "";
+    let title = "";
+
+    // 1. CLEANING MODE (Updated: Dynamic Grouping)
+    if (config.mode === "cleaning") {
+      title = "🧹 Lịch trực nhật tuần này";
+      content = "Danh sách phân công trực nhật:\n\n";
+      const days = ["Thứ 2", "Thứ 3", "Thứ 4", "Thứ 5", "Thứ 6", "Thứ 7"];
+
+      // A. Determine Pool of Students
+      let pool = [];
+      if (config.cleaningSource === "group") {
+        // Get students from specific group
+        pool = [...studentList]
+          .filter((s) => s.group === config.cleaningTargetGroup)
+          .sort((a, b) => a.stt - b.stt);
+      } else if (config.cleaningSource === "penalty") {
+        // Get students with low score
+        pool = overviewStats
+          .filter((s) => s.currentMonthAvg < 81)
+          .sort((a, b) => a.currentMonthAvg - b.currentMonthAvg); // Lowest first
+      } else {
+        // Default: STT Rotation
+        const normalList = [...studentList].sort((a, b) => a.stt - b.stt);
+        let currentIndex = normalList.findIndex(
+          (s) => s.stt === config.cleaningStartStt
+        );
+        if (currentIndex === -1) currentIndex = 0;
+        // Reorder list starting from index
+        pool = [
+          ...normalList.slice(currentIndex),
+          ...normalList.slice(0, currentIndex),
+        ];
+        // For STT mode, take 12 people (default 2 per day) or more if list is long?
+        // Let's take first 12 for simplicity, or just use the whole pool for distribution
+        // Actually, user wants to cycle. So taking 12 is good.
+        pool = pool.slice(0, 13); // Take slightly more to handle odd numbers
+      }
+
+      if (pool.length === 0)
+        return alert("Không tìm thấy học sinh nào phù hợp điều kiện!");
+
+      // B. Distribute Algorithm (Even Distribution)
+      // We have 6 days. We need to distribute `pool` into 6 buckets.
+      let currentIdx = 0;
+      days.forEach((day, i) => {
+        // Logic: We have `pool.length - currentIdx` students left to assign to `6 - i` days.
+        // Students for today = Ceil(Students Left / Days Left)
+        // Example: 13 students, 6 days.
+        // Mon: Ceil(13/6) = 3. Left 10, Days 5.
+        // Tue: Ceil(10/5) = 2. Left 8, Days 4.
+        // Wed: Ceil(8/4) = 2. Left 6, Days 3.
+        // ...
+        const studentsLeft = pool.length - currentIdx;
+        const daysLeft = 6 - i;
+        const countForToday = Math.ceil(studentsLeft / daysLeft);
+
+        const dailyGroup = [];
+        for (let k = 0; k < countForToday; k++) {
+          if (pool[currentIdx]) {
+            dailyGroup.push(pool[currentIdx]);
+            currentIdx++;
+          }
+        }
+
+        const names = dailyGroup.map((s) => `${s.name}`).join(" & ");
+        content += `📅 ${day}: ${names}\n`;
+      });
+
+      content += "\nCác bạn nhớ hoàn thành nhiệm vụ nhé! 💪";
+    } else if (config.mode === "remind") {
+      // CHẾ ĐỘ NHẮC NHỞ (UPDATED: Selected Managers)
+      title = "📢 Nhắc nhở Ban Cán Sự";
+      // Filter managers based on selection
+      const targetManagers = Object.values(users).filter(
+        (u) =>
+          u.role === ROLES.MANAGER && config.targetManagerIds?.includes(u.id)
+      );
+
+      if (targetManagers.length === 0)
+        return alert("Vui lòng chọn ít nhất 1 tổ trưởng để nhắc!");
+
+      content = `🔔 Yêu cầu các bạn Tổ trưởng: \n${targetManagers
+        .map((m) => `- ${m.name}`)
+        .join(
+          "\n"
+        )}\n\nNhanh chóng hoàn thành việc chấm điểm và rà soát nề nếp tuần này. Xin cảm ơn!`;
+    } else {
+      // CHẾ ĐỘ BÁO CÁO (TUẦN HOẶC THÁNG)
+      const isWeekMode = config.mode === "week";
+      title = isWeekMode
+        ? `🤖 Báo cáo Tuần ${activeWeek}`
+        : `🤖 Báo cáo Tháng ${activeMonthId}`;
+
+      let reportData = [];
+      if (isWeekMode) {
+        reportData = studentList.map((s) => {
+          const d = getStudentData(
+            s.id,
+            activeYearId,
+            activeMonthId,
+            activeWeek
+          );
+          return { ...s, score: d.score, fines: d.fines };
+        });
+      } else {
+        reportData = overviewStats.map((s) => ({
+          ...s,
+          score: s.currentMonthAvg,
+          fines: s.currentMonthFines,
+        }));
+      }
+
+      const praiseList = reportData.filter(
+        (s) => s.score >= config.minScoreToPraise
+      );
+      const warnList = reportData.filter(
+        (s) => s.fines >= config.minFineToWarn
+      );
+
+      if (praiseList.length > 0) {
+        content += `🏆 VINH DANH:\n`;
+        praiseList.forEach(
+          (s) => (content += `- ${s.name}: ${s.score.toFixed(1)} điểm\n`)
+        );
+        content += "\n";
+      }
+      if (warnList.length > 0) {
+        content += `⚠️ NHẮC NHỞ NỘP PHẠT:\n`;
+        warnList.forEach(
+          (s) => (content += `- ${s.name}: ${formatMoney(s.fines)}\n`)
+        );
+      }
+      if (!content)
+        content = "Tuần này lớp mình rất ngoan, không có biến động lớn! 🎉";
+    }
+
+    const botNotice = {
+      id: Date.now(),
+      title: title,
+      content: content,
+      date: Date.now(),
+      author: "Trợ lý ảo Bot",
+      role: "bot",
+      isBot: true,
+    };
+    updateData({ notices: [botNotice, ...notices], botConfig: config });
+    setBotModalOpen(false);
+    alert("Bot đã đăng bài thành công!");
   };
 
   const handleRuleClick = (studentId, rule) => {
@@ -1764,6 +2247,43 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       fines: cD.fines + fineChange,
       violations: [nE, ...cD.violations],
     };
+
+    // --- AUTO NOTIFICATION FOR MANAGER ---
+    if (rule.type === "penalty" && managerPermissions.allowReceiveNotis) {
+      const targetStudent = users[targetId];
+      const groupManager = Object.values(users).find(
+        (u) => u.role === ROLES.MANAGER && u.group === targetStudent.group
+      );
+
+      if (groupManager) {
+        const newAutoNotice = {
+          id: Date.now() + Math.random(),
+          title: `⚠️ Trừ điểm: ${targetStudent.name}`,
+          content: `${targetStudent.name} (Tổ ${
+            targetStudent.group
+          }) vừa bị trừ ${Math.abs(points)} điểm.\nLỗi: ${
+            rule.label
+          }\nPhạt: ${formatMoney(fine || 0)}`,
+          date: Date.now(),
+          author: "Hệ thống",
+          role: "bot",
+          isBot: true,
+        };
+        updateData({
+          weeklyData: {
+            ...weeklyData,
+            [getKey(activeYearId, activeMonthId, activeWeek)]: {
+              ...(weeklyData[getKey(activeYearId, activeMonthId, activeWeek)] ||
+                {}),
+              [targetId]: uD,
+            },
+          },
+          notices: [newAutoNotice, ...notices],
+        });
+        return;
+      }
+    }
+
     updateData({
       weeklyData: {
         ...weeklyData,
@@ -1775,6 +2295,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       },
     });
   };
+
   const handleRemoveViolation = (targetId, entryId) => {
     if (isStudent || isMonthLocked) return;
     const cD = getStudentData(
@@ -1814,24 +2335,17 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
 
   const handleAddYear = () => {
     if (!isTeacher && !isAdmin) return;
-
-    // FIX 1: Ensure structure when adding
     const newYear = activeYearId + 1;
-    const updatedYears = [
-      ...years,
-      {
-        id: newYear,
-        name: `${newYear}`,
-        lockedMonths: [], // Đảm bảo trường này luôn tồn tại
-      },
-    ];
-
     if (confirm(`Tạo năm học mới: ${newYear}?`)) {
-      updateData({ years: updatedYears });
+      updateData({
+        years: [
+          ...years,
+          { id: newYear, name: `${newYear}`, lockedMonths: [] },
+        ],
+      });
       setActiveYearId(newYear);
     }
   };
-
   const handleEditYear = (yearId) => {
     if (!isTeacher && !isAdmin) return;
     const currentName = years.find((y) => y.id === yearId)?.name;
@@ -1856,7 +2370,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     if (!canEditMonths) return;
     let updatedYears = [...years];
     const yearIndex = updatedYears.findIndex((y) => y.id === activeYearId);
-
     if (yearIndex === -1) {
       updatedYears.push({
         id: activeYearId,
@@ -2321,6 +2834,23 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
+      {helpModalOpen && (
+        <HelpModal
+          role={currentUser.role}
+          onClose={() => setHelpModalOpen(false)}
+        />
+      )}
+      {botModalOpen && (
+        <BotConfigModal
+          config={botConfig}
+          onClose={() => setBotModalOpen(false)}
+          onSave={(cfg) => updateData({ botConfig: cfg })}
+          onRun={handleRunBot}
+          activeMonthId={activeMonthId}
+          activeWeek={activeWeek}
+          users={users}
+        />
+      )}
       {batchUpdateModalOpen && (
         <BatchUpdateModal
           months={safeMonths}
@@ -2444,6 +2974,12 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
           </div>
           <div className="flex items-center gap-3">
             <button
+              onClick={() => setHelpModalOpen(true)}
+              className="p-2 text-gray-400 hover:text-blue-500"
+            >
+              <HelpCircle size={18} />
+            </button>
+            <button
               onClick={() => setActiveTab("notices")}
               className={`p-2 rounded-full ${
                 activeTab === "notices"
@@ -2500,6 +3036,8 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
             currentUser={currentUser}
             onSave={handleAddNotice}
             onDelete={handleDeleteNotice}
+            onOpenBot={() => setBotModalOpen(true)}
+            canRunBot={canRunBot}
           />
         )}
 
