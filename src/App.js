@@ -56,6 +56,7 @@ import {
   Zap,
   Broom,
   HelpCircle,
+  TrendingUp, // Icon biểu thị tăng tiến
 } from "lucide-react";
 
 // --- FIREBASE SETUP ---
@@ -101,11 +102,11 @@ const DEFAULT_MANAGER_PERMISSIONS = {
   allowRunBot: false,
 };
 
-// ĐÃ BỔ SUNG BIẾN BỊ THIẾU
 const DEFAULT_PERMISSIONS = {
   canManageUsers: false,
   canManageRules: false,
   canResetPin: false,
+  progressivePenaltyMode: false, // Chế độ phạt lũy tiến
 };
 
 // CẤU HÌNH MẶC ĐỊNH CHO BOT
@@ -117,7 +118,7 @@ const DEFAULT_BOT_CONFIG = {
 
   // Cấu hình trực nhật
   cleaningSource: "stt", // 'stt', 'group', 'penalty'
-  cleaningScoreBasis: "both", // 'week', 'month', 'both'
+  cleaningScoreBasis: "week", // 'week' or 'month' or 'both'
   cleaningStartStt: 1,
   cleaningTargetGroup: 1,
   cleaningPrioritizeLowScore: false,
@@ -259,14 +260,13 @@ const formatDate = (timestamp) => {
 
 // --- COMPONENTS ---
 
-// 1. Help Modal
 const HelpModal = ({ role, onClose }) => {
   const guides = {
     [ROLES.TEACHER]: [
       "🔒 Khóa/Mở tháng: Bấm icon ổ khóa.",
       "⚙️ Cấp quyền: Vào tab Nhân sự -> Cài đặt.",
       "🤖 Bot: Dùng để tự động đăng báo cáo hoặc xếp lịch trực nhật.",
-      "📢 Cấp quyền Bot/Thông báo: Vào tab Nhân sự, bấm icon Loa hoặc Robot.",
+      "⚡ Phạt lũy tiến: Bật trong tab Nội quy để tự động tăng tiền phạt khi tái phạm.",
     ],
     [ROLES.ADMIN]: [
       "📝 Chấm điểm: Chọn tab Chấm điểm.",
@@ -327,7 +327,6 @@ const BotConfigModal = ({
   const managers = Object.values(users)
     .filter((u) => u.role === ROLES.MANAGER)
     .sort((a, b) => a.group - b.group);
-
   const toggleManagerSelection = (id) => {
     const current = localConfig.targetManagerIds || [];
     const next = current.includes(id)
@@ -335,7 +334,6 @@ const BotConfigModal = ({
       : [...current, id];
     setLocalConfig({ ...localConfig, targetManagerIds: next });
   };
-
   useEffect(() => {
     if (
       !localConfig.targetManagerIds ||
@@ -355,7 +353,6 @@ const BotConfigModal = ({
           <Bot size={24} />
           <h3 className="font-bold text-lg">Trợ lý ảo Bot</h3>
         </div>
-
         <div className="space-y-4 mb-6">
           <div>
             <label className="block text-xs font-bold text-gray-600 mb-1">
@@ -374,7 +371,6 @@ const BotConfigModal = ({
               <option value="remind">🔔 Nhắc nhở Tổ trưởng</option>
             </select>
           </div>
-
           {(localConfig.mode === "week" || localConfig.mode === "month") && (
             <>
               <div>
@@ -411,7 +407,6 @@ const BotConfigModal = ({
               </div>
             </>
           )}
-
           {localConfig.mode === "cleaning" && (
             <div className="space-y-3">
               <div className="flex items-center gap-2 bg-red-50 p-2 rounded border border-red-100">
@@ -430,7 +425,6 @@ const BotConfigModal = ({
                   Ưu tiên phạt dưới 81 điểm
                 </label>
               </div>
-
               {localConfig.cleaningPrioritizeLowScore && (
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1">
@@ -454,7 +448,6 @@ const BotConfigModal = ({
                   </select>
                 </div>
               )}
-
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">
                   Số người trực / ngày:
@@ -472,7 +465,6 @@ const BotConfigModal = ({
                   placeholder="Mặc định: 2"
                 />
               </div>
-
               {!localConfig.cleaningPrioritizeLowScore && (
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1">
@@ -494,7 +486,6 @@ const BotConfigModal = ({
               )}
             </div>
           )}
-
           {localConfig.mode === "remind" && (
             <div className="space-y-2">
               <p className="text-xs font-bold text-gray-600">
@@ -518,13 +509,9 @@ const BotConfigModal = ({
                   </label>
                 ))}
               </div>
-              <p className="text-[10px] text-blue-500">
-                Đã chọn: {localConfig.targetManagerIds?.length || 0} người
-              </p>
             </div>
           )}
         </div>
-
         <div className="flex flex-col gap-2">
           <button
             onClick={() => {
@@ -547,7 +534,6 @@ const BotConfigModal = ({
   );
 };
 
-// 2. Notice Board Component
 const NoticeBoard = ({
   notices,
   currentUser,
@@ -559,12 +545,10 @@ const NoticeBoard = ({
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({ title: "", content: "" });
-
   const canPost =
     currentUser.role === ROLES.TEACHER ||
     currentUser.role === ROLES.ADMIN ||
     currentUser.canPostNotices;
-
   const handleSubmit = () => {
     if (!formData.title || !formData.content)
       return alert("Vui lòng nhập đủ tiêu đề và nội dung!");
@@ -582,7 +566,6 @@ const NoticeBoard = ({
     setEditingId(null);
     setFormData({ title: "", content: "" });
   };
-
   const handleEdit = (notice) => {
     setEditingId(notice.id);
     setFormData({ title: notice.title, content: notice.content });
@@ -1369,7 +1352,7 @@ const AccountManager = ({
     updateData({
       users: { ...users, [userId]: { ...user, canUseBot: newStatus } },
     });
-  }; // NEW: Toggle Bot Permission
+  };
   const toggleAdminPermission = (key) => {
     if (!isTeacher) return;
     const newPerms = { ...adminPermissions, [key]: !adminPermissions[key] };
@@ -1460,6 +1443,27 @@ const AccountManager = ({
                   }
                 >
                   {adminPermissions.canResetPin ? (
+                    <ToggleRight size={28} />
+                  ) : (
+                    <ToggleLeft size={28} />
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-purple-100">
+                <span className="text-sm text-gray-700">
+                  Phạt Lũy Tiến (Global)
+                </span>
+                <button
+                  onClick={() =>
+                    toggleAdminPermission("progressivePenaltyMode")
+                  }
+                  className={
+                    adminPermissions.progressivePenaltyMode
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {adminPermissions.progressivePenaltyMode ? (
                     <ToggleRight size={28} />
                   ) : (
                     <ToggleLeft size={28} />
@@ -2069,7 +2073,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     updateData({ notices: newNotices });
   };
 
-  // --- BOT FUNCTION (UPDATED V25: BOTH WEEK & MONTH PENALTY) ---
+  // --- BOT FUNCTION ---
   const handleRunBot = (config) => {
     let content = "";
     let title = "";
@@ -2086,8 +2090,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
           .sort((a, b) => a.stt - b.stt);
       } else if (config.cleaningSource === "penalty") {
         let penaltySource = [];
-
-        // 1. Get Week Scores
         const weekScores = studentList.map((s) => {
           const d = getStudentData(
             s.id,
@@ -2097,37 +2099,30 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
           );
           return { id: s.id, weekScore: d.score };
         });
-
-        // 2. Get Month Scores (from overviewStats which is already calculated)
         const monthScores = overviewStats.map((s) => ({
           id: s.id,
           monthScore: s.currentMonthAvg,
         }));
 
-        // 3. Combine & Filter
         penaltySource = studentList.map((s) => {
           const w = weekScores.find((x) => x.id === s.id)?.weekScore || 80;
           const m = monthScores.find((x) => x.id === s.id)?.monthScore || 80;
-
           let isPenalized = false;
           let reason = "";
-
           if (config.cleaningScoreBasis === "week" && w < 81) {
             isPenalized = true;
-            reason = `Tuần ${w}đ`;
+            reason = `(Tuần ${w}đ)`;
           } else if (config.cleaningScoreBasis === "month" && m < 81) {
             isPenalized = true;
-            reason = `Tháng ${m.toFixed(1)}đ`;
+            reason = `(Tháng ${m.toFixed(1)}đ)`;
           } else if (config.cleaningScoreBasis === "both") {
             if (w < 81 || m < 81) {
               isPenalized = true;
-              reason = `(Tuần ${w}đ, Tháng ${m.toFixed(1)}đ)`;
+              reason = `(Phạt: Tuần ${w}đ, Tháng ${m.toFixed(1)}đ)`;
             }
           }
-
           return { ...s, isPenalized, reason, sortScore: Math.min(w, m) };
         });
-
         pool = penaltySource
           .filter((s) => s.isPenalized)
           .sort((a, b) => a.sortScore - b.sortScore);
@@ -2163,7 +2158,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         const itemsLeft = finalRoster.length - currentRosterIdx;
         const daysLeft = 6 - i;
         const countForToday = Math.ceil(itemsLeft / daysLeft);
-
         const dailyGroup = [];
         for (let k = 0; k < countForToday; k++) {
           if (finalRoster[currentRosterIdx]) {
@@ -2171,7 +2165,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
             currentRosterIdx++;
           }
         }
-
         const names = dailyGroup
           .map((s) => {
             let suffix = "";
@@ -2181,10 +2174,8 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
             return `${s.name}${suffix}`;
           })
           .join("\n- ");
-
         content += `📅 ${day}:\n- ${names}\n\n`;
       });
-
       content += `(Tổng cộng: ${finalRoster.length} lượt trực)`;
       content += "\nCác bạn nhớ hoàn thành nhiệm vụ nhé! 💪";
     } else if (config.mode === "remind") {
@@ -2226,14 +2217,12 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
           fines: s.currentMonthFines,
         }));
       }
-
       const praiseList = reportData.filter(
         (s) => s.score >= config.minScoreToPraise
       );
       const warnList = reportData.filter(
         (s) => s.fines >= config.minFineToWarn
       );
-
       if (praiseList.length > 0) {
         content += `🏆 VINH DANH:\n`;
         praiseList.forEach(
@@ -2288,6 +2277,8 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       setSelectedStudentForCustom(null);
     }
   };
+
+  // --- ADD VIOLATION LOGIC (UPDATED V26: PROGRESSIVE PENALTY) ---
   const handleAddViolation = (targetId, rule, points, fine) => {
     if (isStudent || isMonthLocked) return;
     const cD = getStudentData(
@@ -2296,22 +2287,42 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       activeMonthId,
       activeWeek
     );
+
+    let calculatedFine = fine || 0;
+    let violationLabel = rule.label;
+
+    // PROGRESSIVE LOGIC: Increase fine if repeated
+    if (adminPermissions.progressivePenaltyMode && rule.type === "penalty") {
+      // Count total penalties in current week
+      const penaltyCount = cD.violations.filter(
+        (v) => v.type === "penalty"
+      ).length;
+      const multiplier = penaltyCount + 1; // Lần 1 -> x1, Lần 2 -> x2
+
+      if (multiplier > 1) {
+        calculatedFine = calculatedFine * multiplier;
+        violationLabel = `${rule.label} (Lần ${multiplier})`;
+      }
+    }
+
     const nE = {
       id: Date.now(),
       ruleId: rule.id,
-      ruleLabel: rule.label,
-      fineAtTime: fine || 0,
+      ruleLabel: violationLabel,
+      fineAtTime: calculatedFine,
       pointsAtTime: points,
       timestamp: Date.now(),
       by: currentUser.name,
       type: rule.type,
     };
+
     let fineChange = 0;
     if (rule.type === "penalty") {
-      fineChange = fine || 0;
+      fineChange = calculatedFine;
     } else if (rule.type === "bonus") {
-      fineChange = -(fine || 0);
+      fineChange = -calculatedFine;
     }
+
     const uD = {
       ...cD,
       score: cD.score + points,
@@ -2319,22 +2330,23 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       violations: [nE, ...cD.violations],
     };
 
-    // --- AUTO NOTIFICATION FOR MANAGER ---
+    // AUTO NOTIFICATION MANAGER (If enabled)
     if (rule.type === "penalty" && managerPermissions.allowReceiveNotis) {
       const targetStudent = users[targetId];
       const groupManager = Object.values(users).find(
         (u) => u.role === ROLES.MANAGER && u.group === targetStudent.group
       );
-
       if (groupManager) {
         const newAutoNotice = {
           id: Date.now() + Math.random(),
           title: `⚠️ Trừ điểm: ${targetStudent.name}`,
           content: `${targetStudent.name} (Tổ ${
             targetStudent.group
-          }) vừa bị trừ ${Math.abs(points)} điểm.\nLỗi: ${
-            rule.label
-          }\nPhạt: ${formatMoney(fine || 0)}`,
+          }) vừa bị trừ ${Math.abs(
+            points
+          )} điểm.\nLỗi: ${violationLabel}\nPhạt: ${formatMoney(
+            calculatedFine
+          )}`,
           date: Date.now(),
           author: "Hệ thống",
           role: "bot",
@@ -2354,7 +2366,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         return;
       }
     }
-
     updateData({
       weeklyData: {
         ...weeklyData,
@@ -3538,7 +3549,9 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                     }`}
                   >
                     <div>
-                      <p className="text-sm font-medium">{r.label}</p>
+                      <p className="text-sm font-medium flex items-center gap-1">
+                        {r.label}
+                      </p>
                       <p
                         className={`text-xs font-bold ${
                           r.type === "bonus" ? "text-green-600" : "text-red-600"
@@ -3573,10 +3586,8 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
             {/* Form thêm/sửa đơn lẻ (chỉ hiện khi không ở chế độ sửa nhanh) */}
             {canManageRules && !isBulkRulesMode && (
               <div className="pt-4 border-t border-gray-100 space-y-2">
-                <h3 className="text-sm font-bold text-gray-700">
-                  {editingRuleId
-                    ? "Sửa quy định (Có đồng bộ)"
-                    : "Thêm quy định mới"}
+                <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                  {editingRuleId ? "Sửa quy định" : "Thêm quy định mới"}
                 </h3>
                 <input
                   placeholder="Tên quy định"
@@ -3716,6 +3727,9 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     </div>
   );
 };
+// ... (Các phần code Dashboard, Modal, LoginScreen ở trên giữ nguyên)
+
+// 👇 DÁN ĐOẠN NÀY VÀO CUỐI FILE App.js 👇
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -3736,6 +3750,7 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
+    // Đảm bảo DATA_VERSION khớp với biến đã khai báo ở đầu file
     const docRef = doc(
       db,
       "artifacts",
@@ -3793,7 +3808,10 @@ export default function App() {
       years: [{ id: 2024, name: "2024", lockedMonths: [] }],
       weeklyData: {},
       adminPermissions: DEFAULT_PERMISSIONS,
+      managerPermissions: DEFAULT_MANAGER_PERMISSIONS, // Thêm dòng này để khởi tạo quyền tổ trưởng
       months: FIXED_MONTHS.map((m) => ({ ...m, isLocked: false })),
+      notices: [],
+      botConfig: DEFAULT_BOT_CONFIG,
     };
   };
 
@@ -3810,6 +3828,7 @@ export default function App() {
     );
     await updateDoc(docRef, newData);
   };
+
   if (!dbState)
     return (
       <div className="min-h-screen flex items-center justify-center text-indigo-600 font-bold">
