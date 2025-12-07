@@ -56,7 +56,7 @@ import {
   Zap,
   Broom,
   HelpCircle,
-  TrendingUp, // Icon biểu thị tăng tiến
+  TrendingUp,
 } from "lucide-react";
 
 // --- FIREBASE SETUP ---
@@ -72,8 +72,11 @@ const firebaseConfig = {
 const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
+
+// --- KHAI BÁO QUAN TRỌNG (ĐÃ SỬA LỖI Ở ĐÂY) ---
 const appId = "lop12-4-2025";
 const DATA_VERSION = "classData_v13";
+// ---------------------------------------------
 
 // --- CONSTANTS ---
 const ROLES = {
@@ -118,7 +121,7 @@ const DEFAULT_BOT_CONFIG = {
 
   // Cấu hình trực nhật
   cleaningSource: "stt", // 'stt', 'group', 'penalty'
-  cleaningScoreBasis: "week", // 'week' or 'month' or 'both'
+  cleaningScoreBasis: "week", // 'week', 'month', 'both'
   cleaningStartStt: 1,
   cleaningTargetGroup: 1,
   cleaningPrioritizeLowScore: false,
@@ -1147,10 +1150,8 @@ const LoginScreen = ({ dbState, onLogin }) => {
       <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
         {" "}
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">
-            Thống Kê Tình Hình Lớp 12/4
-          </h1>
-          <p className="text-gray-500 text-sm">By Banana</p>
+          <h1 className="text-2xl font-bold text-gray-800">Lớp Học Vui Vẻ</h1>
+          <p className="text-gray-500 text-sm">Năm học mới & Danh sách mới</p>
         </div>{" "}
         {!selectedUser ? (
           <>
@@ -1352,7 +1353,7 @@ const AccountManager = ({
     updateData({
       users: { ...users, [userId]: { ...user, canUseBot: newStatus } },
     });
-  };
+  }; // NEW: Toggle Bot Permission
   const toggleAdminPermission = (key) => {
     if (!isTeacher) return;
     const newPerms = { ...adminPermissions, [key]: !adminPermissions[key] };
@@ -1451,7 +1452,7 @@ const AccountManager = ({
               </div>
               <div className="flex items-center justify-between bg-white p-2 rounded border border-purple-100">
                 <span className="text-sm text-gray-700">
-                  Phạt Lũy Tiến (Global)
+                  ⚡ Phạt Lũy Tiến (Toàn diện)
                 </span>
                 <button
                   onClick={() =>
@@ -2090,6 +2091,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
           .sort((a, b) => a.stt - b.stt);
       } else if (config.cleaningSource === "penalty") {
         let penaltySource = [];
+
         const weekScores = studentList.map((s) => {
           const d = getStudentData(
             s.id,
@@ -2109,20 +2111,23 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
           const m = monthScores.find((x) => x.id === s.id)?.monthScore || 80;
           let isPenalized = false;
           let reason = "";
+
           if (config.cleaningScoreBasis === "week" && w < 81) {
             isPenalized = true;
-            reason = `(Tuần ${w}đ)`;
+            reason = `Tuần ${w}đ`;
           } else if (config.cleaningScoreBasis === "month" && m < 81) {
             isPenalized = true;
-            reason = `(Tháng ${m.toFixed(1)}đ)`;
+            reason = `Tháng ${m.toFixed(1)}đ`;
           } else if (config.cleaningScoreBasis === "both") {
             if (w < 81 || m < 81) {
               isPenalized = true;
               reason = `(Phạt: Tuần ${w}đ, Tháng ${m.toFixed(1)}đ)`;
             }
           }
+
           return { ...s, isPenalized, reason, sortScore: Math.min(w, m) };
         });
+
         pool = penaltySource
           .filter((s) => s.isPenalized)
           .sort((a, b) => a.sortScore - b.sortScore);
@@ -2158,6 +2163,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         const itemsLeft = finalRoster.length - currentRosterIdx;
         const daysLeft = 6 - i;
         const countForToday = Math.ceil(itemsLeft / daysLeft);
+
         const dailyGroup = [];
         for (let k = 0; k < countForToday; k++) {
           if (finalRoster[currentRosterIdx]) {
@@ -2165,6 +2171,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
             currentRosterIdx++;
           }
         }
+
         const names = dailyGroup
           .map((s) => {
             let suffix = "";
@@ -2174,8 +2181,10 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
             return `${s.name}${suffix}`;
           })
           .join("\n- ");
+
         content += `📅 ${day}:\n- ${names}\n\n`;
       });
+
       content += `(Tổng cộng: ${finalRoster.length} lượt trực)`;
       content += "\nCác bạn nhớ hoàn thành nhiệm vụ nhé! 💪";
     } else if (config.mode === "remind") {
@@ -2217,12 +2226,14 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
           fines: s.currentMonthFines,
         }));
       }
+
       const praiseList = reportData.filter(
         (s) => s.score >= config.minScoreToPraise
       );
       const warnList = reportData.filter(
         (s) => s.fines >= config.minFineToWarn
       );
+
       if (praiseList.length > 0) {
         content += `🏆 VINH DANH:\n`;
         praiseList.forEach(
@@ -2277,8 +2288,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       setSelectedStudentForCustom(null);
     }
   };
-
-  // --- ADD VIOLATION LOGIC (UPDATED V26: PROGRESSIVE PENALTY) ---
   const handleAddViolation = (targetId, rule, points, fine) => {
     if (isStudent || isMonthLocked) return;
     const cD = getStudentData(
@@ -2291,13 +2300,18 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     let calculatedFine = fine || 0;
     let violationLabel = rule.label;
 
-    // PROGRESSIVE LOGIC: Increase fine if repeated
+    // PROGRESSIVE PENALTY LOGIC (GLOBAL COUNT)
+    // Đếm tổng số lần vi phạm BẤT KỲ lỗi phạt nào trong tuần này
     if (adminPermissions.progressivePenaltyMode && rule.type === "penalty") {
-      // Count total penalties in current week
-      const penaltyCount = cD.violations.filter(
+      // Lọc ra các lỗi là 'penalty'
+      const totalPenalties = cD.violations.filter(
         (v) => v.type === "penalty"
       ).length;
-      const multiplier = penaltyCount + 1; // Lần 1 -> x1, Lần 2 -> x2
+
+      // Lần 1 (count=0) -> x1
+      // Lần 2 (count=1) -> x2
+      // Lần 3 (count=2) -> x3
+      const multiplier = totalPenalties + 1;
 
       if (multiplier > 1) {
         calculatedFine = calculatedFine * multiplier;
@@ -2315,14 +2329,12 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       by: currentUser.name,
       type: rule.type,
     };
-
     let fineChange = 0;
     if (rule.type === "penalty") {
       fineChange = calculatedFine;
     } else if (rule.type === "bonus") {
       fineChange = -calculatedFine;
     }
-
     const uD = {
       ...cD,
       score: cD.score + points,
@@ -2330,7 +2342,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       violations: [nE, ...cD.violations],
     };
 
-    // AUTO NOTIFICATION MANAGER (If enabled)
+    // AUTO NOTIFICATION
     if (rule.type === "penalty" && managerPermissions.allowReceiveNotis) {
       const targetStudent = users[targetId];
       const groupManager = Object.values(users).find(
@@ -2366,6 +2378,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         return;
       }
     }
+
     updateData({
       weeklyData: {
         ...weeklyData,
@@ -3727,9 +3740,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     </div>
   );
 };
-// ... (Các phần code Dashboard, Modal, LoginScreen ở trên giữ nguyên)
-
-// 👇 DÁN ĐOẠN NÀY VÀO CUỐI FILE App.js 👇
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -3750,7 +3760,6 @@ export default function App() {
 
   useEffect(() => {
     if (!user) return;
-    // Đảm bảo DATA_VERSION khớp với biến đã khai báo ở đầu file
     const docRef = doc(
       db,
       "artifacts",
@@ -3808,7 +3817,7 @@ export default function App() {
       years: [{ id: 2024, name: "2024", lockedMonths: [] }],
       weeklyData: {},
       adminPermissions: DEFAULT_PERMISSIONS,
-      managerPermissions: DEFAULT_MANAGER_PERMISSIONS, // Thêm dòng này để khởi tạo quyền tổ trưởng
+      managerPermissions: DEFAULT_MANAGER_PERMISSIONS,
       months: FIXED_MONTHS.map((m) => ({ ...m, isLocked: false })),
       notices: [],
       botConfig: DEFAULT_BOT_CONFIG,
@@ -3828,7 +3837,6 @@ export default function App() {
     );
     await updateDoc(docRef, newData);
   };
-
   if (!dbState)
     return (
       <div className="min-h-screen flex items-center justify-center text-indigo-600 font-bold">
