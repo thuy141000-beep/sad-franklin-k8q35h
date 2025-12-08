@@ -12,6 +12,8 @@ import {
   setDoc,
   onSnapshot,
   updateDoc,
+  getDocs,
+  collection,
 } from "firebase/firestore";
 import {
   ClipboardList,
@@ -57,6 +59,11 @@ import {
   Broom,
   HelpCircle,
   TrendingUp,
+  Database,
+  Wifi,
+  Download,
+  Upload,
+  HardDrive,
 } from "lucide-react";
 
 // --- FIREBASE SETUP ---
@@ -73,10 +80,13 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const auth = getAuth(app);
 const db = getFirestore(app);
 
-// --- KHAI BÁO QUAN TRỌNG (ĐÃ SỬA LỖI Ở ĐÂY) ---
-const appId = "lop12-4-2025";
-const DATA_VERSION = "classData_v13";
-// ---------------------------------------------
+// --- CẤU HÌNH MẶC ĐỊNH (SỬA LỖI TẠI ĐÂY) ---
+const DEFAULT_APP_ID = "lop12-4-2025";
+const DEFAULT_DATA_VERSION = "classData_v13";
+
+// Biến dùng chung cho toàn App
+const appId = DEFAULT_APP_ID;
+const DATA_VERSION = DEFAULT_DATA_VERSION;
 
 // --- CONSTANTS ---
 const ROLES = {
@@ -85,14 +95,12 @@ const ROLES = {
   MANAGER: "manager",
   STUDENT: "student",
 };
-
 const ROLE_LABELS = {
   [ROLES.TEACHER]: "Giáo viên",
   [ROLES.ADMIN]: "Lớp trưởng",
   [ROLES.MANAGER]: "Tổ trưởng",
   [ROLES.STUDENT]: "Học sinh",
 };
-
 const DEFAULT_MANAGER_PERMISSIONS = {
   allowAdd: false,
   allowDelete: false,
@@ -104,38 +112,29 @@ const DEFAULT_MANAGER_PERMISSIONS = {
   allowReceiveNotis: false,
   allowRunBot: false,
 };
-
 const DEFAULT_PERMISSIONS = {
   canManageUsers: false,
   canManageRules: false,
   canResetPin: false,
-  progressivePenaltyMode: false, // Chế độ phạt lũy tiến
+  progressivePenaltyMode: false,
 };
-
-// CẤU HÌNH MẶC ĐỊNH CHO BOT
 const DEFAULT_BOT_CONFIG = {
   enabled: true,
   mode: "week",
   minScoreToPraise: 90,
   minFineToWarn: 20000,
-
-  // Cấu hình trực nhật
-  cleaningSource: "stt", // 'stt', 'group', 'penalty'
-  cleaningScoreBasis: "week", // 'week', 'month', 'both'
+  cleaningSource: "stt",
+  cleaningScoreBasis: "week",
   cleaningStartStt: 1,
   cleaningTargetGroup: 1,
   cleaningPrioritizeLowScore: false,
   cleaningPerDay: 2,
-
-  // Cấu hình nhắc nhở
   targetManagerIds: [],
 };
-
 const FIXED_MONTHS = Array.from({ length: 12 }, (_, i) => ({
   id: i + 1,
   name: `Tháng ${i + 1}`,
 }));
-
 const REAL_STUDENTS = [
   "Văn Nguyễn Thành An",
   "Lê Thoại Cát Anh",
@@ -164,7 +163,6 @@ const REAL_STUDENTS = [
   "Nguyễn Hoàng Ý Vân",
   "Trần Nguyễn Thùy Vân",
 ];
-
 const DEFAULT_RULES = [
   {
     id: "r1",
@@ -234,7 +232,6 @@ const DEFAULT_RULES = [
     type: "bonus",
   },
 ];
-
 const getRating = (score) => {
   if (score > 80) return { label: "Tốt", color: "bg-green-100 text-green-700" };
   if (score >= 65) return { label: "Khá", color: "bg-blue-100 text-blue-700" };
@@ -244,12 +241,10 @@ const getRating = (score) => {
     return { label: "Yếu", color: "bg-orange-100 text-orange-700" };
   return { label: "Kém", color: "bg-red-100 text-red-700" };
 };
-
 const formatMoney = (amount) =>
   new Intl.NumberFormat("vi-VN", { style: "currency", currency: "VND" }).format(
     amount
   );
-
 const formatDate = (timestamp) => {
   if (!timestamp) return "";
   const date = new Date(timestamp);
@@ -262,7 +257,6 @@ const formatDate = (timestamp) => {
 };
 
 // --- COMPONENTS ---
-
 const HelpModal = ({ role, onClose }) => {
   const guides = {
     [ROLES.TEACHER]: [
@@ -291,7 +285,9 @@ const HelpModal = ({ role, onClose }) => {
   const currentGuide = guides[role] || guides[ROLES.STUDENT];
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      {" "}
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm animate-slideDown">
+        {" "}
         <div className="flex justify-between items-center mb-4">
           <h3 className="font-bold text-lg text-indigo-900 flex items-center gap-2">
             <HelpCircle size={24} /> Hướng dẫn sử dụng
@@ -299,7 +295,7 @@ const HelpModal = ({ role, onClose }) => {
           <button onClick={onClose}>
             <X size={20} className="text-gray-400" />
           </button>
-        </div>
+        </div>{" "}
         <div className="space-y-3">
           {currentGuide.map((text, idx) => (
             <div key={idx} className="flex gap-3 items-start">
@@ -307,13 +303,11 @@ const HelpModal = ({ role, onClose }) => {
               <p className="text-sm text-gray-600 leading-relaxed">{text}</p>
             </div>
           ))}
-        </div>
-      </div>
+        </div>{" "}
+      </div>{" "}
     </div>
   );
 };
-
-// 2. Bot Configuration Modal
 const BotConfigModal = ({
   config = DEFAULT_BOT_CONFIG,
   onClose,
@@ -348,15 +342,17 @@ const BotConfigModal = ({
       }));
     }
   }, []);
-
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      {" "}
       <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-xs animate-slideDown max-h-[90vh] overflow-y-auto">
+        {" "}
         <div className="flex items-center gap-2 mb-4 text-indigo-900">
           <Bot size={24} />
           <h3 className="font-bold text-lg">Trợ lý ảo Bot</h3>
-        </div>
+        </div>{" "}
         <div className="space-y-4 mb-6">
+          {" "}
           <div>
             <label className="block text-xs font-bold text-gray-600 mb-1">
               Chế độ hoạt động
@@ -373,7 +369,7 @@ const BotConfigModal = ({
               <option value="cleaning">🧹 Xếp lịch Trực nhật</option>
               <option value="remind">🔔 Nhắc nhở Tổ trưởng</option>
             </select>
-          </div>
+          </div>{" "}
           {(localConfig.mode === "week" || localConfig.mode === "month") && (
             <>
               <div>
@@ -409,7 +405,7 @@ const BotConfigModal = ({
                 />
               </div>
             </>
-          )}
+          )}{" "}
           {localConfig.mode === "cleaning" && (
             <div className="space-y-3">
               <div className="flex items-center gap-2 bg-red-50 p-2 rounded border border-red-100">
@@ -488,7 +484,7 @@ const BotConfigModal = ({
                 </div>
               )}
             </div>
-          )}
+          )}{" "}
           {localConfig.mode === "remind" && (
             <div className="space-y-2">
               <p className="text-xs font-bold text-gray-600">
@@ -513,8 +509,8 @@ const BotConfigModal = ({
                 ))}
               </div>
             </div>
-          )}
-        </div>
+          )}{" "}
+        </div>{" "}
         <div className="flex flex-col gap-2">
           <button
             onClick={() => {
@@ -531,12 +527,11 @@ const BotConfigModal = ({
           >
             Đóng
           </button>
-        </div>
-      </div>
+        </div>{" "}
+      </div>{" "}
     </div>
   );
 };
-
 const NoticeBoard = ({
   notices,
   currentUser,
@@ -579,10 +574,11 @@ const NoticeBoard = ({
       onDelete(id);
     }
   };
-
   return (
     <div className="fade-in space-y-4">
+      {" "}
       <div className="flex gap-2">
+        {" "}
         {canPost && !isEditing && (
           <button
             onClick={() => setIsEditing(true)}
@@ -590,7 +586,7 @@ const NoticeBoard = ({
           >
             <Plus size={20} /> Viết thông báo
           </button>
-        )}
+        )}{" "}
         {canRunBot && !isEditing && (
           <button
             onClick={onOpenBot}
@@ -598,13 +594,14 @@ const NoticeBoard = ({
           >
             <Bot size={20} /> Bot
           </button>
-        )}
-      </div>
+        )}{" "}
+      </div>{" "}
       {isEditing && (
         <div className="bg-white rounded-xl shadow-sm p-4 border border-indigo-100 animate-slideDown">
+          {" "}
           <h3 className="font-bold text-gray-800 mb-3">
             {editingId ? "Chỉnh sửa" : "Bài viết mới"}
-          </h3>
+          </h3>{" "}
           <input
             className="w-full p-2 border rounded text-sm font-bold mb-2"
             placeholder="Tiêu đề..."
@@ -613,7 +610,7 @@ const NoticeBoard = ({
               setFormData({ ...formData, title: e.target.value })
             }
             autoFocus
-          />
+          />{" "}
           <textarea
             className="w-full p-2 border rounded text-sm h-24 mb-2"
             placeholder="Nội dung..."
@@ -621,7 +618,7 @@ const NoticeBoard = ({
             onChange={(e) =>
               setFormData({ ...formData, content: e.target.value })
             }
-          />
+          />{" "}
           <div className="flex gap-2 justify-end">
             <button
               onClick={() => {
@@ -639,10 +636,11 @@ const NoticeBoard = ({
             >
               <Send size={14} /> Đăng
             </button>
-          </div>
+          </div>{" "}
         </div>
-      )}
+      )}{" "}
       <div className="space-y-3">
+        {" "}
         {notices && notices.length > 0 ? (
           notices
             .sort((a, b) => b.date - a.date)
@@ -653,8 +651,11 @@ const NoticeBoard = ({
                   notice.isBot ? "border-purple-500" : "border-blue-500"
                 }`}
               >
+                {" "}
                 <div className="flex justify-between items-start mb-2">
+                  {" "}
                   <div>
+                    {" "}
                     <div className="flex items-center gap-2">
                       {notice.isBot && (
                         <Bot size={16} className="text-purple-600" />
@@ -662,7 +663,7 @@ const NoticeBoard = ({
                       <h4 className="font-bold text-gray-800 text-lg">
                         {notice.title}
                       </h4>
-                    </div>
+                    </div>{" "}
                     <p className="text-xs text-gray-400 flex items-center gap-1">
                       {formatDate(notice.date)} •{" "}
                       <span
@@ -676,8 +677,8 @@ const NoticeBoard = ({
                       >
                         {notice.author}
                       </span>
-                    </p>
-                  </div>
+                    </p>{" "}
+                  </div>{" "}
                   {canPost && (
                     <div className="flex gap-2">
                       {!notice.isBot && (
@@ -695,11 +696,11 @@ const NoticeBoard = ({
                         <Trash2 size={16} />
                       </button>
                     </div>
-                  )}
-                </div>
+                  )}{" "}
+                </div>{" "}
                 <p className="text-gray-600 text-sm whitespace-pre-wrap leading-relaxed">
                   {notice.content}
-                </p>
+                </p>{" "}
               </div>
             ))
         ) : (
@@ -707,13 +708,11 @@ const NoticeBoard = ({
             <MessageSquare size={40} className="mx-auto mb-2 opacity-20" />
             <p>Chưa có thông báo nào</p>
           </div>
-        )}
-      </div>
+        )}{" "}
+      </div>{" "}
     </div>
   );
 };
-
-// ... (Giữ nguyên Modal: BulkEdit, CustomRule, BatchUpdate, ChangePassword, UserEdit, LoginScreen, AccountManager) ...
 const BulkEditModal = ({ count, onClose, onConfirm, onDelete }) => {
   const [points, setPoints] = useState(0);
   const [fine, setFine] = useState(0);
@@ -1067,12 +1066,138 @@ const UserEditModal = ({ targetUser, currentUser, onSave, onClose }) => {
     </div>
   );
 };
-const LoginScreen = ({ dbState, onLogin }) => {
+const LoginScreen = ({ dbState, onLogin, updateData }) => {
   const [activeTab, setActiveTab] = useState("student");
   const [selectedUser, setSelectedUser] = useState(null);
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
   const [searchStudent, setSearchStudent] = useState("");
+
+  const [config, setConfig] = useState({
+    appId: DEFAULT_APP_ID,
+    version: DEFAULT_DATA_VERSION,
+  });
+  const [isConfigOpen, setIsConfigOpen] = useState(false);
+  const [dbStatus, setDbStatus] = useState(null);
+  const [foundArtifacts, setFoundArtifacts] = useState([]);
+  const [foundVersions, setFoundVersions] = useState([]);
+
+  useEffect(() => {
+    if (isConfigOpen) {
+      setDbStatus("checking");
+      const docRef = doc(
+        db,
+        "artifacts",
+        config.appId,
+        "public",
+        "data",
+        config.version,
+        "main"
+      );
+      const unsub = onSnapshot(docRef, (snap) => {
+        if (snap.exists()) setDbStatus("found");
+        else setDbStatus("not_found");
+      });
+      return () => unsub();
+    }
+  }, [config, isConfigOpen]);
+
+  // LOCAL STORAGE CHECK
+  useEffect(() => {
+    const localData = localStorage.getItem(`backup_${config.appId}`);
+    if (localData) {
+      // Could enable a 'Restore from Cache' button
+    }
+  }, [config]);
+
+  const handleScan = async () => {
+    setDbStatus("scanning");
+    try {
+      const artifactsRef = collection(db, "artifacts");
+      const artifactsSnap = await getDocs(artifactsRef);
+      const apps = artifactsSnap.docs.map((d) => d.id);
+      setFoundArtifacts(apps);
+      if (apps.length > 0) handleSelectApp(apps[0]);
+      else setDbStatus("no_artifacts");
+    } catch (err) {
+      console.error(err);
+      setDbStatus("error");
+    }
+  };
+
+  const handleSelectApp = async (appId) => {
+    setConfig((prev) => ({ ...prev, appId }));
+    try {
+      const versionsRef = collection(db, "artifacts", appId, "public", "data");
+      const versionsSnap = await getDocs(versionsRef);
+      const versions = versionsSnap.docs.map((d) => d.id);
+      setFoundVersions(versions);
+    } catch (err) {
+      setFoundVersions([]);
+    }
+  };
+
+  const handleSelectVersion = (v) => {
+    setConfig((prev) => ({ ...prev, version: v }));
+  };
+
+  const handleBackup = () => {
+    const dataStr = JSON.stringify(dbState, null, 2);
+    const blob = new Blob([dataStr], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `backup_${config.appId}_${new Date()
+      .toISOString()
+      .slice(0, 10)}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    alert("✅ Đã tải file backup về máy!");
+  };
+
+  const handleRestore = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+    if (
+      !window.confirm(
+        "⚠️ CẢNH BÁO: Dữ liệu hiện tại sẽ bị GHI ĐÈ bằng dữ liệu trong file. Bạn có chắc chắn không?"
+      )
+    )
+      return;
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const parsed = JSON.parse(e.target.result);
+        if (!parsed.users || !parsed.weeklyData)
+          return alert("❌ File không hợp lệ!");
+        await updateData(parsed);
+        alert("✅ Khôi phục dữ liệu thành công!");
+      } catch (err) {
+        alert("❌ Lỗi: " + err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  const handleRestoreFromCache = async () => {
+    const localData = localStorage.getItem(`backup_${config.appId}`);
+    if (localData) {
+      if (!window.confirm("Khôi phục dữ liệu từ bộ nhớ đệm trình duyệt?"))
+        return;
+      try {
+        const parsed = JSON.parse(localData);
+        await updateData(parsed);
+        alert("✅ Đã khôi phục từ Cache!");
+      } catch (e) {
+        alert("Lỗi cache");
+      }
+    } else {
+      alert("Không có dữ liệu trong Cache");
+    }
+  };
+
   const getSortedList = (roleFilter) =>
     Object.values(dbState.users)
       .filter((u) => u.role === roleFilter)
@@ -1144,15 +1269,166 @@ const LoginScreen = ({ dbState, onLogin }) => {
         ))}{" "}
     </div>
   );
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-600 to-indigo-500 p-4">
-      {" "}
-      <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md">
-        {" "}
+      <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md relative">
+        {/* Nút Cấu hình Ẩn */}
+        <button
+          onClick={() => setIsConfigOpen(!isConfigOpen)}
+          className="absolute top-2 right-2 text-gray-300 hover:text-gray-500"
+        >
+          <Database size={16} />
+        </button>
+        {/* Panel Cấu hình Data (MỚI) */}
+        {isConfigOpen && (
+          <div className="mb-4 p-3 bg-gray-100 rounded-lg border border-gray-200 text-sm animate-slideDown">
+            <h3 className="font-bold text-gray-700 mb-2 flex items-center gap-2">
+              <Wifi size={14} /> Cấu hình Kết nối
+            </h3>
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <button
+                  onClick={handleScan}
+                  className="bg-indigo-600 text-white px-2 py-1 rounded text-xs font-bold hover:bg-indigo-700"
+                >
+                  🔍 Quét tìm dữ liệu cũ
+                </button>
+              </div>
+
+              {/* LIST FOUND APPS */}
+              {foundArtifacts.length > 0 && (
+                <div className="mb-2">
+                  <p className="text-xs font-bold text-gray-600">
+                    Chọn Lớp (App ID):
+                  </p>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {foundArtifacts.map((app) => (
+                      <button
+                        key={app}
+                        onClick={() => handleSelectApp(app)}
+                        className={`px-2 py-1 text-xs rounded border ${
+                          config.appId === app
+                            ? "bg-blue-100 border-blue-500 text-blue-700"
+                            : "bg-white hover:bg-gray-50"
+                        }`}
+                      >
+                        {app}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* LIST FOUND VERSIONS */}
+              {foundVersions.length > 0 && (
+                <div className="mb-2">
+                  <p className="text-xs font-bold text-gray-600">
+                    Chọn Phiên bản (Version):
+                  </p>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {foundVersions.map((v) => (
+                      <button
+                        key={v}
+                        onClick={() => handleSelectVersion(v)}
+                        className={`px-2 py-1 text-xs rounded border ${
+                          config.version === v
+                            ? "bg-green-100 border-green-500 text-green-700"
+                            : "bg-white hover:bg-gray-50"
+                        }`}
+                      >
+                        {v}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-xs text-gray-500">
+                  Mã Lớp (Hiện tại)
+                </label>
+                <input
+                  className="w-full p-1 border rounded"
+                  value={config.appId}
+                  onChange={(e) =>
+                    setConfig({ ...config, appId: e.target.value })
+                  }
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-500">
+                  Phiên bản (Hiện tại)
+                </label>
+                <input
+                  className="w-full p-1 border rounded"
+                  value={config.version}
+                  onChange={(e) =>
+                    setConfig({ ...config, version: e.target.value })
+                  }
+                />
+              </div>
+              <div className="flex items-center gap-2 mt-1 mb-2">
+                {dbStatus === "checking" && (
+                  <span className="text-yellow-600 text-xs">
+                    Đang kiểm tra...
+                  </span>
+                )}
+                {dbStatus === "found" && (
+                  <span className="text-green-600 text-xs font-bold">
+                    ✅ Tìm thấy dữ liệu!
+                  </span>
+                )}
+                {dbStatus === "not_found" && (
+                  <span className="text-red-500 text-xs font-bold">
+                    ❌ Không tìm thấy (Sẽ tạo mới)
+                  </span>
+                )}
+                {dbStatus === "no_artifacts" && (
+                  <span className="text-gray-500 text-xs">
+                    Không tìm thấy lớp nào.
+                  </span>
+                )}
+              </div>
+
+              <div className="flex gap-2 pt-2 border-t border-gray-300">
+                <button
+                  onClick={handleBackup}
+                  className="flex-1 py-1.5 bg-blue-500 text-white rounded text-xs font-bold flex items-center justify-center gap-1 hover:bg-blue-600"
+                >
+                  <Download size={14} /> Backup
+                </button>
+                <label className="flex-1 py-1.5 bg-orange-500 text-white rounded text-xs font-bold flex items-center justify-center gap-1 hover:bg-orange-600 cursor-pointer">
+                  <Upload size={14} /> Restore
+                  <input
+                    type="file"
+                    className="hidden"
+                    accept=".json"
+                    onChange={handleRestore}
+                  />
+                </label>
+              </div>
+              <button
+                onClick={handleRestoreFromCache}
+                className="w-full py-1.5 bg-purple-600 text-white rounded text-xs font-bold hover:bg-purple-700 mt-1 flex items-center justify-center gap-1"
+              >
+                <HardDrive size={14} /> Khôi phục từ Bộ nhớ đệm
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="w-full py-1.5 bg-gray-800 text-white rounded text-xs font-bold hover:bg-black mt-2"
+              >
+                🔄 Tải lại trang để áp dụng
+              </button>
+            </div>
+          </div>
+        )}
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">Lớp Học Vui Vẻ</h1>
-          <p className="text-gray-500 text-sm">Năm học mới & Danh sách mới</p>
-        </div>{" "}
+          <h1 className="text-2xl font-bold text-gray-800">
+            Thống kê tình hình học tập lớp 12/4
+          </h1>
+          <p className="text-gray-500 text-sm">By banana</p>
+        </div>
         {!selectedUser ? (
           <>
             {" "}
@@ -1353,7 +1629,7 @@ const AccountManager = ({
     updateData({
       users: { ...users, [userId]: { ...user, canUseBot: newStatus } },
     });
-  }; // NEW: Toggle Bot Permission
+  };
   const toggleAdminPermission = (key) => {
     if (!isTeacher) return;
     const newPerms = { ...adminPermissions, [key]: !adminPermissions[key] };
@@ -1452,7 +1728,7 @@ const AccountManager = ({
               </div>
               <div className="flex items-center justify-between bg-white p-2 rounded border border-purple-100">
                 <span className="text-sm text-gray-700">
-                  ⚡ Phạt Lũy Tiến (Toàn diện)
+                  Phạt Lũy Tiến (Global)
                 </span>
                 <button
                   onClick={() =>
@@ -1899,6 +2175,14 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
   // Update Bot Permission: Teacher OR Admin OR User has canUseBot=true
   const canRunBot = isTeacher || isAdmin || currentUser.canUseBot;
 
+  // AUTO BACKUP EFFECT
+  useEffect(() => {
+    if (dbState) {
+      // Save state to local storage whenever it changes
+      localStorage.setItem(`backup_${DEFAULT_APP_ID}`, JSON.stringify(dbState));
+    }
+  }, [dbState]);
+
   const currentYearObj = years.find((y) => y.id === activeYearId) || {
     id: activeYearId,
     name: `${activeYearId}`,
@@ -2074,7 +2358,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     updateData({ notices: newNotices });
   };
 
-  // --- BOT FUNCTION ---
+  // --- BOT FUNCTION (UPDATED V25: BOTH WEEK & MONTH PENALTY) ---
   const handleRunBot = (config) => {
     let content = "";
     let title = "";
@@ -2092,6 +2376,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       } else if (config.cleaningSource === "penalty") {
         let penaltySource = [];
 
+        // 1. Get Week Scores
         const weekScores = studentList.map((s) => {
           const d = getStudentData(
             s.id,
@@ -2101,14 +2386,18 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
           );
           return { id: s.id, weekScore: d.score };
         });
+
+        // 2. Get Month Scores (from overviewStats which is already calculated)
         const monthScores = overviewStats.map((s) => ({
           id: s.id,
           monthScore: s.currentMonthAvg,
         }));
 
+        // 3. Combine & Filter
         penaltySource = studentList.map((s) => {
           const w = weekScores.find((x) => x.id === s.id)?.weekScore || 80;
           const m = monthScores.find((x) => x.id === s.id)?.monthScore || 80;
+
           let isPenalized = false;
           let reason = "";
 
@@ -3844,7 +4133,13 @@ export default function App() {
       </div>
     );
   if (!currentUser)
-    return <LoginScreen dbState={dbState} onLogin={setCurrentUser} />;
+    return (
+      <LoginScreen
+        dbState={dbState}
+        onLogin={setCurrentUser}
+        updateData={updateData}
+      />
+    );
   return (
     <Dashboard
       currentUser={currentUser}
