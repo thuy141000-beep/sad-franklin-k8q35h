@@ -1070,6 +1070,572 @@ const UserEditModal = ({ targetUser, currentUser, onSave, onClose }) => {
   );
 };
 
+// --- COMPONENT MỚI: QUẢN LÝ NHÂN SỰ ---
+const AccountManager = ({
+  users,
+  updateData,
+  currentUser,
+  adminPermissions,
+  managerPermissions,
+}) => {
+  const [searchTerm, setSearchTerm] = useState("");
+  const [editingUser, setEditingUser] = useState(null);
+  const [isAdding, setIsAdding] = useState(false);
+  const [newUser, setNewUser] = useState({
+    name: "",
+    stt: "",
+    group: 1,
+    role: ROLES.STUDENT,
+  });
+  const isTeacher = currentUser.role === ROLES.TEACHER;
+  const isAdmin = currentUser.role === ROLES.ADMIN;
+  const isManager = currentUser.role === ROLES.MANAGER;
+  const canManageUsers =
+    isTeacher || (isAdmin && adminPermissions.canManageUsers);
+  const canAddUser =
+    isTeacher ||
+    (isAdmin && adminPermissions.canManageUsers) ||
+    (isManager && managerPermissions.allowAdd);
+  const checkManagerAction = (action) => {
+    if (isTeacher || (isAdmin && adminPermissions.canManageUsers)) return true;
+    if (isManager) {
+      if (action === "edit") return managerPermissions.allowEditName;
+      if (action === "delete") return managerPermissions.allowDelete;
+      if (action === "pin") return managerPermissions.allowResetPin;
+    }
+    return false;
+  };
+  const handleSaveUser = (updatedData) => {
+    const userId = editingUser.id;
+    let userToUpdate = { ...users[userId], ...updatedData };
+    updateData({ users: { ...users, [userId]: userToUpdate } });
+    setEditingUser(null);
+    alert("Cập nhật thành công!");
+  };
+  const handleDeleteUser = (userId) => {
+    if (window.confirm("Xóa thành viên?")) {
+      const updatedUsers = { ...users };
+      delete updatedUsers[userId];
+      updateData({ users: updatedUsers });
+    }
+  };
+  const handleResetPin = (user) => {
+    const newPin = prompt("Nhập PIN mới (4 số):", "0000");
+    if (newPin && newPin.length >= 4) {
+      const updatedUsers = { ...users, [user.id]: { ...user, pin: newPin } };
+      updateData({ users: updatedUsers });
+      alert("Đã đổi PIN!");
+    }
+  };
+  const handleAddUser = () => {
+    if (!newUser.name) return alert("Nhập tên");
+    const id = `s_${Date.now()}`;
+    const newStudent = {
+      id,
+      name: newUser.name,
+      stt: Number(newUser.stt) || 99,
+      group: Number(newUser.group),
+      role: newUser.role,
+      pin: "0000",
+    };
+    updateData({ users: { ...users, [id]: newStudent } });
+    setIsAdding(false);
+    setNewUser({ name: "", stt: "", group: 1, role: ROLES.STUDENT });
+    alert("Đã thêm!");
+  };
+  const toggleUserNoticePermission = (userId) => {
+    if (!isTeacher) return;
+    const user = users[userId];
+    const newStatus = !user.canPostNotices;
+    updateData({
+      users: { ...users, [userId]: { ...user, canPostNotices: newStatus } },
+    });
+  };
+  const toggleUserBotPermission = (userId) => {
+    if (!isTeacher) return;
+    const user = users[userId];
+    const newStatus = !user.canUseBot;
+    updateData({
+      users: { ...users, [userId]: { ...user, canUseBot: newStatus } },
+    });
+  };
+  const toggleAdminPermission = (key) => {
+    if (!isTeacher) return;
+    const newPerms = { ...adminPermissions, [key]: !adminPermissions[key] };
+    updateData({ adminPermissions: newPerms });
+  };
+  const toggleManagerPermission = (key) => {
+    if (!isTeacher) return;
+    const newPerms = { ...managerPermissions, [key]: !managerPermissions[key] };
+    updateData({ managerPermissions: newPerms });
+  };
+  const displayedUsers = Object.values(users)
+    .filter((u) => {
+      if (!u.name.toLowerCase().includes(searchTerm.toLowerCase()))
+        return false;
+      if (isManager)
+        return u.group === currentUser.group && u.role === ROLES.STUDENT;
+      return true;
+    })
+    .sort((a, b) => {
+      if (a.group !== b.group) return a.group - b.group;
+      return (a.stt || 999) - (b.stt || 999);
+    });
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm overflow-hidden fade-in">
+      {editingUser && (
+        <UserEditModal
+          targetUser={editingUser}
+          currentUser={currentUser}
+          onClose={() => setEditingUser(null)}
+          onSave={handleSaveUser}
+        />
+      )}
+      {isTeacher && (
+        <div className="bg-purple-50 p-4 border-b border-purple-100">
+          <h3 className="font-bold text-purple-900 mb-3 flex items-center gap-2">
+            <Settings size={18} /> Cấu hình quyền hạn
+          </h3>
+          <div className="mb-4">
+            <h4 className="text-xs font-bold text-purple-700 uppercase mb-2">
+              Quyền Lớp Trưởng (Admin)
+            </h4>
+            <div className="flex flex-col gap-2">
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-purple-100">
+                <span className="text-sm text-gray-700">
+                  Quản lý thành viên
+                </span>
+                <button
+                  onClick={() => toggleAdminPermission("canManageUsers")}
+                  className={
+                    adminPermissions.canManageUsers
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {adminPermissions.canManageUsers ? (
+                    <ToggleRight size={28} />
+                  ) : (
+                    <ToggleLeft size={28} />
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-purple-100">
+                <span className="text-sm text-gray-700">Sửa Nội quy</span>
+                <button
+                  onClick={() => toggleAdminPermission("canManageRules")}
+                  className={
+                    adminPermissions.canManageRules
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {adminPermissions.canManageRules ? (
+                    <ToggleRight size={28} />
+                  ) : (
+                    <ToggleLeft size={28} />
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-purple-100">
+                <span className="text-sm text-gray-700">Đổi PIN</span>
+                <button
+                  onClick={() => toggleAdminPermission("canResetPin")}
+                  className={
+                    adminPermissions.canResetPin
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {adminPermissions.canResetPin ? (
+                    <ToggleRight size={28} />
+                  ) : (
+                    <ToggleLeft size={28} />
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-purple-100">
+                <span className="text-sm text-gray-700">
+                  Phạt Lũy Tiến (Global)
+                </span>
+                <button
+                  onClick={() =>
+                    toggleAdminPermission("progressivePenaltyMode")
+                  }
+                  className={
+                    adminPermissions.progressivePenaltyMode
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {adminPermissions.progressivePenaltyMode ? (
+                    <ToggleRight size={28} />
+                  ) : (
+                    <ToggleLeft size={28} />
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+          <div>
+            <h4 className="text-xs font-bold text-blue-700 uppercase mb-2">
+              Quyền Tổ Trưởng (Manager)
+            </h4>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100">
+                <span className="text-xs text-gray-700">Thêm HS</span>
+                <button
+                  onClick={() => toggleManagerPermission("allowAdd")}
+                  className={
+                    managerPermissions.allowAdd
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {managerPermissions.allowAdd ? (
+                    <ToggleRight size={24} />
+                  ) : (
+                    <ToggleLeft size={24} />
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100">
+                <span className="text-xs text-gray-700">Xóa HS</span>
+                <button
+                  onClick={() => toggleManagerPermission("allowDelete")}
+                  className={
+                    managerPermissions.allowDelete
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {managerPermissions.allowDelete ? (
+                    <ToggleRight size={24} />
+                  ) : (
+                    <ToggleLeft size={24} />
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100">
+                <span className="text-xs text-gray-700">Sửa tên</span>
+                <button
+                  onClick={() => toggleManagerPermission("allowEditName")}
+                  className={
+                    managerPermissions.allowEditName
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {managerPermissions.allowEditName ? (
+                    <ToggleRight size={24} />
+                  ) : (
+                    <ToggleLeft size={24} />
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100">
+                <span className="text-xs text-gray-700">Đổi PIN</span>
+                <button
+                  onClick={() => toggleManagerPermission("allowResetPin")}
+                  className={
+                    managerPermissions.allowResetPin
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {managerPermissions.allowResetPin ? (
+                    <ToggleRight size={24} />
+                  ) : (
+                    <ToggleLeft size={24} />
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100">
+                <span className="text-xs text-gray-700">Chọn nhiều</span>
+                <button
+                  onClick={() => toggleManagerPermission("allowBulkActions")}
+                  className={
+                    managerPermissions.allowBulkActions
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {managerPermissions.allowBulkActions ? (
+                    <ToggleRight size={24} />
+                  ) : (
+                    <ToggleLeft size={24} />
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100">
+                <span className="text-xs text-gray-700">Tùy chỉnh điểm</span>
+                <button
+                  onClick={() => toggleManagerPermission("allowCustomMode")}
+                  className={
+                    managerPermissions.allowCustomMode
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {managerPermissions.allowCustomMode ? (
+                    <ToggleRight size={24} />
+                  ) : (
+                    <ToggleLeft size={24} />
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100">
+                <span className="text-xs text-gray-700">Sử dụng Bot</span>
+                <button
+                  onClick={() => toggleManagerPermission("allowRunBot")}
+                  className={
+                    managerPermissions.allowRunBot
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {managerPermissions.allowRunBot ? (
+                    <ToggleRight size={24} />
+                  ) : (
+                    <ToggleLeft size={24} />
+                  )}
+                </button>
+              </div>
+              <div className="flex items-center justify-between bg-white p-2 rounded border border-blue-100">
+                <span className="text-xs text-gray-700">Nhận Thông báo</span>
+                <button
+                  onClick={() => toggleManagerPermission("allowReceiveNotis")}
+                  className={
+                    managerPermissions.allowReceiveNotis
+                      ? "text-green-600"
+                      : "text-gray-400"
+                  }
+                >
+                  {managerPermissions.allowReceiveNotis ? (
+                    <ToggleRight size={24} />
+                  ) : (
+                    <ToggleLeft size={24} />
+                  )}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+        <div>
+          <h2 className="font-bold text-gray-800">Danh sách thành viên</h2>
+          <p className="text-xs text-gray-500">
+            {isManager ? `Tổ ${currentUser.group}` : "Toàn lớp"}
+          </p>
+        </div>
+        {canAddUser && (
+          <button
+            onClick={() => setIsAdding(!isAdding)}
+            className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700 text-xs flex items-center gap-1"
+          >
+            <UserPlus size={16} /> Thêm
+          </button>
+        )}
+      </div>
+      {isAdding && (
+        <div className="p-4 bg-blue-50 border-b border-blue-100 animate-slideDown">
+          <h3 className="text-sm font-bold text-blue-800 mb-2">
+            Thêm thành viên mới
+          </h3>
+          <div className="flex gap-2 flex-wrap">
+            <input
+              className="w-16 p-2 text-sm border rounded"
+              placeholder="STT"
+              type="number"
+              value={newUser.stt}
+              onChange={(e) => setNewUser({ ...newUser, stt: e.target.value })}
+            />
+            <input
+              className="flex-1 p-2 text-sm border rounded"
+              placeholder="Họ và tên"
+              value={newUser.name}
+              onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+            />
+            <select
+              className="p-2 text-sm border rounded"
+              value={newUser.group}
+              onChange={(e) =>
+                setNewUser({ ...newUser, group: Number(e.target.value) })
+              }
+            >
+              {[1, 2, 3, 4].map((g) => (
+                <option key={g} value={g}>
+                  Tổ {g}
+                </option>
+              ))}
+            </select>
+            {(isTeacher || isAdmin) && (
+              <select
+                className="p-2 text-sm border rounded font-bold text-indigo-700"
+                value={newUser.role}
+                onChange={(e) =>
+                  setNewUser({ ...newUser, role: e.target.value })
+                }
+              >
+                <option value={ROLES.STUDENT}>Học sinh</option>
+                <option value={ROLES.MANAGER}>Tổ trưởng</option>
+                <option value={ROLES.ADMIN}>Lớp trưởng</option>
+              </select>
+            )}
+            <button
+              onClick={handleAddUser}
+              className="bg-green-600 text-white px-4 py-2 rounded text-sm font-medium w-full sm:w-auto"
+            >
+              Lưu
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="p-2 relative">
+        <Search size={14} className="absolute left-5 top-5 text-gray-400" />
+        <input
+          className="w-full pl-9 pr-3 py-2 text-sm border rounded-lg bg-gray-50 mb-2"
+          placeholder="Tìm..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+        />
+      </div>
+
+      <div className="max-h-[500px] overflow-y-auto p-2">
+        {displayedUsers.map((user) => {
+          const isTargetStudent = user.role === ROLES.STUDENT;
+          const isSameGroup = user.group === currentUser.group;
+          const canEdit =
+            isTeacher ||
+            (isAdmin && adminPermissions.canManageUsers) ||
+            (isManager &&
+              isTargetStudent &&
+              isSameGroup &&
+              checkManagerAction("edit"));
+          const canDelete =
+            isTeacher ||
+            (isAdmin && adminPermissions.canManageUsers) ||
+            (isManager &&
+              isTargetStudent &&
+              isSameGroup &&
+              checkManagerAction("delete"));
+          const canPin =
+            isTeacher ||
+            (isAdmin && adminPermissions.canResetPin) ||
+            (isManager &&
+              isTargetStudent &&
+              isSameGroup &&
+              checkManagerAction("pin"));
+
+          return (
+            <div
+              key={user.id}
+              className="flex justify-between items-center p-3 hover:bg-gray-50 rounded-lg border-b border-gray-50 last:border-0 group"
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className={`p-2 rounded-full ${
+                    user.role === ROLES.TEACHER
+                      ? "bg-purple-100 text-purple-600"
+                      : user.role === ROLES.ADMIN
+                      ? "bg-red-100 text-red-600"
+                      : user.role === ROLES.MANAGER
+                      ? "bg-blue-100 text-blue-600"
+                      : "bg-gray-100 text-gray-500"
+                  }`}
+                >
+                  {user.role === ROLES.TEACHER ? (
+                    <School size={16} />
+                  ) : user.role === ROLES.ADMIN ? (
+                    <ShieldAlert size={16} />
+                  ) : (
+                    <User size={16} />
+                  )}
+                </div>
+                <div>
+                  <p className="font-medium text-gray-800 text-sm">
+                    <span className="text-gray-400 text-xs mr-1 font-normal">
+                      #{user.stt}
+                    </span>
+                    {user.name}
+                  </p>
+                  <p className="text-[10px] text-gray-400 uppercase">
+                    {ROLE_LABELS[user.role]}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {isTeacher &&
+                  (user.role === ROLES.STUDENT ||
+                    user.role === ROLES.MANAGER) && (
+                    <>
+                      <button
+                        onClick={() => toggleUserNoticePermission(user.id)}
+                        className={`p-1.5 rounded ${
+                          user.canPostNotices
+                            ? "text-blue-600 bg-blue-50"
+                            : "text-gray-300 hover:bg-gray-100"
+                        }`}
+                        title="Quyền Thông báo"
+                      >
+                        <Megaphone size={16} />
+                      </button>
+                      <button
+                        onClick={() => toggleUserBotPermission(user.id)}
+                        className={`p-1.5 rounded ${
+                          user.canUseBot
+                            ? "text-purple-600 bg-purple-50"
+                            : "text-gray-300 hover:bg-gray-100"
+                        }`}
+                        title="Quyền Bot"
+                      >
+                        <Bot size={16} />
+                      </button>
+                    </>
+                  )}
+                {user.role !== ROLES.TEACHER && (
+                  <>
+                    {canEdit && (
+                      <button
+                        onClick={() => setEditingUser(user)}
+                        className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"
+                        title="Sửa thông tin"
+                      >
+                        <UserCog size={18} />
+                      </button>
+                    )}
+                    {canPin && (
+                      <button
+                        onClick={() => handleResetPin(user)}
+                        className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded"
+                        title="Đổi PIN"
+                      >
+                        <Key size={16} />
+                      </button>
+                    )}
+                    {canDelete && (
+                      <button
+                        onClick={() => handleDeleteUser(user.id)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                        title="Xóa thành viên"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+};
+
 // --- NEW COMPONENT: BULK ADD MODAL ---
 const BulkAddModal = ({ selectedStudents, rules, onClose, onConfirm }) => {
   const [selectedRuleId, setSelectedRuleId] = useState(
