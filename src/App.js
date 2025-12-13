@@ -67,6 +67,8 @@ import {
   Shield,
   UserMinus,
   Layers,
+  Star,
+  Crown,
 } from "lucide-react";
 
 // --- FIREBASE SETUP ---
@@ -267,6 +269,7 @@ const HelpModal = ({ role, onClose }) => {
       "⚙️ Cấp quyền: Vào tab Nhân sự -> Cài đặt.",
       "🤖 Bot: Dùng để tự động đăng báo cáo hoặc xếp lịch trực nhật.",
       "⚡ Phạt lũy tiến: Bật trong tab Nội quy để tự động tăng tiền phạt khi tái phạm.",
+      "⭐ Tuần đặc biệt: Nhân hệ số điểm/tiền cho các dịp thi đua.",
     ],
     [ROLES.ADMIN]: [
       "📝 Chấm điểm: Chọn tab Chấm điểm.",
@@ -1644,7 +1647,6 @@ const BulkAddModal = ({ selectedStudents, rules, onClose, onConfirm }) => {
   const [quantities, setQuantities] = useState({});
   const [isMerge, setIsMerge] = useState(false);
 
-  // Initialize quantities with 1
   useEffect(() => {
     const initialQty = {};
     selectedStudents.forEach((s) => (initialQty[s.id] = 1));
@@ -1671,7 +1673,6 @@ const BulkAddModal = ({ selectedStudents, rules, onClose, onConfirm }) => {
         <h3 className="font-bold text-lg text-indigo-900 mb-4 flex items-center gap-2">
           <Layers size={20} /> Xử lý hàng loạt ({selectedStudents.length})
         </h3>
-
         <div className="mb-4">
           <label className="block text-xs font-bold text-gray-600 mb-1">
             Chọn Lỗi / Thưởng:
@@ -1688,7 +1689,6 @@ const BulkAddModal = ({ selectedStudents, rules, onClose, onConfirm }) => {
             ))}
           </select>
         </div>
-
         <div className="flex-1 overflow-y-auto border rounded p-2 bg-gray-50 mb-4">
           {selectedStudents.map((s) => (
             <div
@@ -1711,7 +1711,6 @@ const BulkAddModal = ({ selectedStudents, rules, onClose, onConfirm }) => {
             </div>
           ))}
         </div>
-
         <div className="flex items-center gap-2 mb-4 bg-yellow-50 p-2 rounded border border-yellow-200">
           <input
             type="checkbox"
@@ -1727,7 +1726,6 @@ const BulkAddModal = ({ selectedStudents, rules, onClose, onConfirm }) => {
             Gộp thành 1 dòng (Ví dụ: "Lỗi... (x3)")
           </label>
         </div>
-
         <div className="flex gap-2">
           <button
             onClick={onClose}
@@ -1740,6 +1738,100 @@ const BulkAddModal = ({ selectedStudents, rules, onClose, onConfirm }) => {
             className="flex-1 py-2 bg-indigo-600 text-white rounded font-bold"
           >
             Xác nhận
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- NEW COMPONENT: SPECIAL WEEK MODAL ---
+const SpecialWeekModal = ({
+  year,
+  month,
+  week,
+  currentConfig,
+  onClose,
+  onSave,
+}) => {
+  const [config, setConfig] = useState(
+    currentConfig || { name: "", pointRate: 1, fineRate: 1 }
+  );
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm animate-slideDown">
+        <div className="flex items-center gap-2 mb-4 text-yellow-600">
+          <Star size={24} fill="currentColor" />
+          <h3 className="font-bold text-lg">Cấu hình Tuần Đặc Biệt</h3>
+        </div>
+        <p className="text-sm text-gray-500 mb-4">
+          Thiết lập cho:{" "}
+          <b>
+            Tuần {week} - Tháng {month}/{year}
+          </b>
+        </p>
+
+        <div className="space-y-3 mb-6">
+          <div>
+            <label className="block text-xs font-bold text-gray-600 mb-1">
+              Tên sự kiện (VD: Thi đua 20/11)
+            </label>
+            <input
+              className="w-full p-2 border rounded font-bold text-indigo-700"
+              placeholder="Nhập tên..."
+              value={config.name}
+              onChange={(e) => setConfig({ ...config, name: e.target.value })}
+              autoFocus
+            />
+          </div>
+          <div className="flex gap-2">
+            <div className="flex-1">
+              <label className="block text-xs font-bold text-gray-600 mb-1">
+                Hệ số Điểm (x)
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                className="w-full p-2 border rounded"
+                value={config.pointRate}
+                onChange={(e) =>
+                  setConfig({ ...config, pointRate: Number(e.target.value) })
+                }
+              />
+            </div>
+            <div className="flex-1">
+              <label className="block text-xs font-bold text-gray-600 mb-1">
+                Hệ số Tiền (x)
+              </label>
+              <input
+                type="number"
+                step="0.1"
+                className="w-full p-2 border rounded"
+                value={config.fineRate}
+                onChange={(e) =>
+                  setConfig({ ...config, fineRate: Number(e.target.value) })
+                }
+              />
+            </div>
+          </div>
+          <p className="text-xs text-gray-400 italic">
+            * Đặt hệ số là 1 để về bình thường.
+          </p>
+        </div>
+
+        <div className="flex gap-2">
+          <button
+            onClick={onClose}
+            className="flex-1 py-2 bg-gray-100 text-gray-600 rounded font-bold"
+          >
+            Hủy
+          </button>
+          <button
+            onClick={() => onSave(config)}
+            className="flex-1 py-2 bg-yellow-500 text-white rounded font-bold hover:bg-yellow-600"
+          >
+            Lưu thiết lập
           </button>
         </div>
       </div>
@@ -2274,6 +2366,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     managerPermissions = DEFAULT_MANAGER_PERMISSIONS,
     notices = [],
     botConfig = DEFAULT_BOT_CONFIG,
+    specialWeeks = {},
   } = dbState;
 
   const [activeYearId, setActiveYearId] = useState(
@@ -2319,6 +2412,9 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
   });
   const [editingRuleId, setEditingRuleId] = useState(null);
   const [showPasswordModal, setShowPasswordModal] = useState(false);
+
+  // STATE FOR SPECIAL WEEK
+  const [specialWeekModalOpen, setSpecialWeekModalOpen] = useState(false);
 
   const isTeacher = currentUser.role === ROLES.TEACHER;
   const isAdmin = currentUser.role === ROLES.ADMIN;
@@ -2367,6 +2463,10 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
   const studentList = Object.values(users)
     .filter((u) => u.role === ROLES.STUDENT || u.role === ROLES.MANAGER)
     .sort((a, b) => a.stt - b.stt);
+
+  // CHECK SPECIAL WEEK
+  const currentWeekKey = getKey(activeYearId, activeMonthId, activeWeek);
+  const currentSpecialWeek = specialWeeks[currentWeekKey];
 
   // --- STATS ---
   const classFundStats = useMemo(() => {
@@ -2542,7 +2642,19 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     alert("Đã đăng!");
   };
 
-  // --- VIOLATION LOGIC ---
+  // --- SPECIAL WEEK LOGIC ---
+  const handleSaveSpecialWeek = (config) => {
+    const key = getKey(activeYearId, activeMonthId, activeWeek);
+    const newSpecialWeeks = { ...specialWeeks, [key]: config };
+    // Nếu rate = 1 và name rỗng -> Xóa
+    if (config.pointRate === 1 && config.fineRate === 1 && !config.name) {
+      delete newSpecialWeeks[key];
+    }
+    updateData({ specialWeeks: newSpecialWeeks });
+    setSpecialWeekModalOpen(false);
+  };
+
+  // --- VIOLATION LOGIC (UPDATED WITH SPECIAL WEEK) ---
   const handleRuleClick = (studentId, rule) => {
     if (selectionMode) return;
     if (customMode) {
@@ -2575,8 +2687,12 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       activeMonthId,
       activeWeek
     );
+
     let calculatedFine = fine || 0;
+    let calculatedPoints = points;
     let violationLabel = rule.label;
+
+    // Apply Progressive Penalty
     if (adminPermissions.progressivePenaltyMode && rule.type === "penalty") {
       const totalPenalties = cD.violations.filter(
         (v) => v.type === "penalty"
@@ -2587,12 +2703,22 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         violationLabel = `${rule.label} (Lần ${multiplier})`;
       }
     }
+
+    // Apply Special Week Multiplier
+    if (currentSpecialWeek) {
+      calculatedPoints *= currentSpecialWeek.pointRate;
+      calculatedFine *= currentSpecialWeek.fineRate;
+      // Chỉ thêm tag nếu có tên sự kiện
+      if (currentSpecialWeek.name)
+        violationLabel = `[${currentSpecialWeek.name}] ${violationLabel}`;
+    }
+
     const nE = {
       id: Date.now(),
       ruleId: rule.id,
       ruleLabel: violationLabel,
       fineAtTime: calculatedFine,
-      pointsAtTime: points,
+      pointsAtTime: calculatedPoints,
       timestamp: Date.now(),
       by: currentUser.name,
       type: rule.type,
@@ -2605,7 +2731,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     }
     const uD = {
       ...cD,
-      score: cD.score + points,
+      score: cD.score + calculatedPoints,
       fines: cD.fines + fineChange,
       violations: [nE, ...cD.violations],
     };
@@ -2658,7 +2784,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     });
   };
 
-  // --- BULK ADD LOGIC ---
+  // --- BULK ADD LOGIC (UPDATED WITH SPECIAL WEEK) ---
   const toggleStudentSelection = (id) => {
     setSelectedStudentIds((prev) =>
       prev.includes(id) ? prev.filter((sid) => sid !== id) : [...prev, id]
@@ -2666,7 +2792,6 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
   };
 
   const handleBulkAddViolations = (rule, data, isMerge) => {
-    // data: [{studentId, qty}, ...]
     let newWeeklyData = { ...weeklyData };
     const dataKey = getKey(activeYearId, activeMonthId, activeWeek);
     const weekData = newWeeklyData[dataKey] || {};
@@ -2681,13 +2806,25 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
         violations: [],
       };
 
-      const totalPoints = rule.points * qty;
-      const totalFine = (rule.fine || 0) * qty;
+      let unitPoints = rule.points;
+      let unitFine = rule.fine || 0;
+      let labelPrefix = "";
+
+      // Apply Special Week
+      if (currentSpecialWeek) {
+        unitPoints *= currentSpecialWeek.pointRate;
+        unitFine *= currentSpecialWeek.fineRate;
+        if (currentSpecialWeek.name)
+          labelPrefix = `[${currentSpecialWeek.name}] `;
+      }
+
+      const totalPoints = unitPoints * qty;
+      const totalFine = unitFine * qty;
 
       let newViolationsToAdd = [];
 
       if (isMerge) {
-        const label = `${rule.label} (x${qty})`;
+        const label = `${labelPrefix}${rule.label} (x${qty})`;
         newViolationsToAdd.push({
           id: Date.now() + Math.random(),
           ruleId: rule.id,
@@ -2703,9 +2840,9 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
           newViolationsToAdd.push({
             id: Date.now() + Math.random() + i,
             ruleId: rule.id,
-            ruleLabel: rule.label,
-            fineAtTime: rule.fine || 0,
-            pointsAtTime: rule.points,
+            ruleLabel: labelPrefix + rule.label,
+            fineAtTime: unitFine,
+            pointsAtTime: unitPoints,
             timestamp: Date.now(),
             by: currentUser.name,
             type: rule.type,
@@ -3314,6 +3451,16 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
           onConfirm={handleBulkAddViolations}
         />
       )}
+      {specialWeekModalOpen && (
+        <SpecialWeekModal
+          year={activeYearId}
+          month={activeMonthId}
+          week={activeWeek}
+          currentConfig={currentSpecialWeek}
+          onClose={() => setSpecialWeekModalOpen(false)}
+          onSave={handleSaveSpecialWeek}
+        />
+      )}
 
       <header className="bg-white shadow-sm sticky top-0 z-20">
         <div className="max-w-3xl mx-auto px-4 py-2 flex justify-between items-center border-b border-gray-100">
@@ -3458,6 +3605,42 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       </header>
 
       <main className="max-w-3xl mx-auto p-4">
+        {/* BANNER TUẦN ĐẶC BIỆT */}
+        {currentSpecialWeek && activeMonthId !== "ALL" && (
+          <div className="mb-4 bg-gradient-to-r from-yellow-200 to-orange-100 p-3 rounded-xl border border-yellow-300 shadow-sm animate-slideDown flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-yellow-400 text-white rounded-full shadow-sm">
+                <Crown size={20} />
+              </div>
+              <div>
+                <h3 className="font-bold text-yellow-900 text-sm uppercase">
+                  {currentSpecialWeek.name}
+                </h3>
+                <div className="flex gap-2 text-xs font-medium text-yellow-800 mt-0.5">
+                  {currentSpecialWeek.pointRate !== 1 && (
+                    <span className="bg-white/50 px-2 py-0.5 rounded">
+                      Điểm x{currentSpecialWeek.pointRate}
+                    </span>
+                  )}
+                  {currentSpecialWeek.fineRate !== 1 && (
+                    <span className="bg-white/50 px-2 py-0.5 rounded">
+                      Tiền x{currentSpecialWeek.fineRate}
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
+            {isTeacher && (
+              <button
+                onClick={() => setSpecialWeekModalOpen(true)}
+                className="p-2 text-yellow-700 hover:bg-yellow-200 rounded-lg"
+              >
+                <Edit3 size={16} />
+              </button>
+            )}
+          </div>
+        )}
+
         {/* TAB: THÔNG BÁO */}
         {activeTab === "notices" && (
           <NoticeBoard
@@ -4021,6 +4204,51 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
           </div>
         )}
 
+        {/* TAB: CẤU HÌNH (SETTINGS) - CHỈ DÀNH CHO GV */}
+        {activeTab === "settings" && isTeacher && (
+          <div className="fade-in space-y-4">
+            <div className="bg-white rounded-xl shadow-sm p-4">
+              <h3 className="font-bold text-indigo-900 mb-4 flex items-center gap-2">
+                <Star size={20} className="text-yellow-500" /> Tuần Đặc Biệt
+              </h3>
+              <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                <p className="text-sm text-yellow-800 mb-2">
+                  Đang chọn:{" "}
+                  <b>
+                    Tuần {activeWeek} - {activeMonthLabel}
+                  </b>
+                </p>
+                {currentSpecialWeek ? (
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-bold text-yellow-900">
+                        {currentSpecialWeek.name}
+                      </p>
+                      <p className="text-xs text-yellow-700">
+                        Điểm x{currentSpecialWeek.pointRate} | Tiền x
+                        {currentSpecialWeek.fineRate}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setSpecialWeekModalOpen(true)}
+                      className="bg-white border border-yellow-300 text-yellow-700 px-3 py-1.5 rounded-lg text-xs font-bold"
+                    >
+                      Chỉnh sửa
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setSpecialWeekModalOpen(true)}
+                    className="w-full py-2 bg-yellow-500 text-white rounded-lg font-bold text-sm hover:bg-yellow-600 shadow-sm"
+                  >
+                    Thiết lập tuần này là Tuần Đặc Biệt
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* TAB: QUẢN LÝ NHÂN SỰ (CHỈ GV/LT/TT) */}
         {canManageAccount && activeTab === "accounts" && (
           <AccountManager
@@ -4094,6 +4322,19 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
             >
               <Users size={20} />
               <span className="text-[10px] mt-1">Nhân sự</span>
+            </button>
+          )}
+          {isTeacher && (
+            <button
+              onClick={() => setActiveTab("settings")}
+              className={`flex flex-col items-center p-2 rounded-lg ${
+                activeTab === "settings"
+                  ? "text-indigo-600 bg-indigo-50"
+                  : "text-gray-400"
+              }`}
+            >
+              <Settings size={20} />
+              <span className="text-[10px] mt-1">Cấu hình</span>
             </button>
           )}
         </div>
@@ -4183,6 +4424,7 @@ export default function App() {
       months: FIXED_MONTHS.map((m) => ({ ...m, isLocked: false })),
       notices: [],
       botConfig: DEFAULT_BOT_CONFIG,
+      specialWeeks: {},
     };
   };
 
