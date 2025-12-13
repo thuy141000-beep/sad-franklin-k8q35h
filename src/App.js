@@ -269,7 +269,7 @@ const HelpModal = ({ role, onClose }) => {
       "⚙️ Cấp quyền: Vào tab Nhân sự -> Cài đặt.",
       "🤖 Bot: Dùng để tự động đăng báo cáo hoặc xếp lịch trực nhật.",
       "⚡ Phạt lũy tiến: Bật trong tab Nội quy để tự động tăng tiền phạt khi tái phạm.",
-      "⭐ Tuần đặc biệt: Nhân hệ số điểm/tiền cho các dịp thi đua.",
+      "⭐ Tuần đặc biệt: Nhân hệ số riêng cho Phạt và Thưởng.",
     ],
     [ROLES.ADMIN]: [
       "📝 Chấm điểm: Chọn tab Chấm điểm.",
@@ -1755,7 +1755,7 @@ const SpecialWeekModal = ({
   onSave,
 }) => {
   const [config, setConfig] = useState(
-    currentConfig || { name: "", pointRate: 1, fineRate: 1 }
+    currentConfig || { name: "", penaltyRate: 1, bonusRate: 1 }
   );
 
   return (
@@ -1787,37 +1787,35 @@ const SpecialWeekModal = ({
           </div>
           <div className="flex gap-2">
             <div className="flex-1">
-              <label className="block text-xs font-bold text-gray-600 mb-1">
-                Hệ số Điểm (x)
+              <label className="block text-xs font-bold text-red-600 mb-1">
+                Hệ số PHẠT (x)
               </label>
               <input
                 type="number"
                 step="0.1"
-                className="w-full p-2 border rounded"
-                value={config.pointRate}
+                className="w-full p-2 border rounded text-red-700 font-bold"
+                value={config.penaltyRate}
                 onChange={(e) =>
-                  setConfig({ ...config, pointRate: Number(e.target.value) })
+                  setConfig({ ...config, penaltyRate: Number(e.target.value) })
                 }
               />
             </div>
             <div className="flex-1">
-              <label className="block text-xs font-bold text-gray-600 mb-1">
-                Hệ số Tiền (x)
+              <label className="block text-xs font-bold text-green-600 mb-1">
+                Hệ số THƯỞNG (x)
               </label>
               <input
                 type="number"
                 step="0.1"
-                className="w-full p-2 border rounded"
-                value={config.fineRate}
+                className="w-full p-2 border rounded text-green-700 font-bold"
+                value={config.bonusRate}
                 onChange={(e) =>
-                  setConfig({ ...config, fineRate: Number(e.target.value) })
+                  setConfig({ ...config, bonusRate: Number(e.target.value) })
                 }
               />
             </div>
           </div>
-          <p className="text-xs text-gray-400 italic">
-            * Đặt hệ số là 1 để về bình thường.
-          </p>
+          <p className="text-xs text-gray-400 italic">* Hệ số mặc định là 1.</p>
         </div>
 
         <div className="flex gap-2">
@@ -2238,10 +2236,8 @@ const LoginScreen = ({ dbState, onLogin, updateData }) => {
           </div>
         )}
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">
-            Thống kê tình hình 12/4
-          </h1>
-          <p className="text-gray-500 text-sm">By Banana</p>
+          <h1 className="text-2xl font-bold text-gray-800">Lớp Học Vui Vẻ</h1>
+          <p className="text-gray-500 text-sm">Năm học mới & Danh sách mới</p>
         </div>
         {!selectedUser ? (
           <>
@@ -2649,14 +2645,14 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     const key = getKey(activeYearId, activeMonthId, activeWeek);
     const newSpecialWeeks = { ...specialWeeks, [key]: config };
     // Nếu rate = 1 và name rỗng -> Xóa
-    if (config.pointRate === 1 && config.fineRate === 1 && !config.name) {
+    if (config.penaltyRate === 1 && config.bonusRate === 1 && !config.name) {
       delete newSpecialWeeks[key];
     }
     updateData({ specialWeeks: newSpecialWeeks });
     setSpecialWeekModalOpen(false);
   };
 
-  // --- VIOLATION LOGIC (UPDATED WITH SPECIAL WEEK) ---
+  // --- VIOLATION LOGIC (UPDATED WITH SPECIAL WEEK SPLIT) ---
   const handleRuleClick = (studentId, rule) => {
     if (selectionMode) return;
     if (customMode) {
@@ -2706,11 +2702,15 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       }
     }
 
-    // Apply Special Week Multiplier
+    // Apply Special Week Multiplier (SPLIT)
     if (currentSpecialWeek) {
-      calculatedPoints *= currentSpecialWeek.pointRate;
-      calculatedFine *= currentSpecialWeek.fineRate;
-      // Chỉ thêm tag nếu có tên sự kiện
+      let rate = 1;
+      if (rule.type === "penalty") rate = currentSpecialWeek.penaltyRate || 1;
+      else if (rule.type === "bonus") rate = currentSpecialWeek.bonusRate || 1;
+
+      calculatedPoints *= rate;
+      calculatedFine *= rate;
+
       if (currentSpecialWeek.name)
         violationLabel = `[${currentSpecialWeek.name}] ${violationLabel}`;
     }
@@ -2786,7 +2786,7 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
     });
   };
 
-  // --- BULK ADD LOGIC (UPDATED WITH SPECIAL WEEK) ---
+  // --- BULK ADD LOGIC (UPDATED WITH SPECIAL WEEK SPLIT) ---
   const toggleStudentSelection = (id) => {
     setSelectedStudentIds((prev) =>
       prev.includes(id) ? prev.filter((sid) => sid !== id) : [...prev, id]
@@ -2812,10 +2812,15 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
       let unitFine = rule.fine || 0;
       let labelPrefix = "";
 
-      // Apply Special Week
+      // Apply Special Week (SPLIT)
       if (currentSpecialWeek) {
-        unitPoints *= currentSpecialWeek.pointRate;
-        unitFine *= currentSpecialWeek.fineRate;
+        let rate = 1;
+        if (rule.type === "penalty") rate = currentSpecialWeek.penaltyRate || 1;
+        else if (rule.type === "bonus")
+          rate = currentSpecialWeek.bonusRate || 1;
+
+        unitPoints *= rate;
+        unitFine *= rate;
         if (currentSpecialWeek.name)
           labelPrefix = `[${currentSpecialWeek.name}] `;
       }
@@ -3619,14 +3624,14 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                   {currentSpecialWeek.name}
                 </h3>
                 <div className="flex gap-2 text-xs font-medium text-yellow-800 mt-0.5">
-                  {currentSpecialWeek.pointRate !== 1 && (
-                    <span className="bg-white/50 px-2 py-0.5 rounded">
-                      Điểm x{currentSpecialWeek.pointRate}
+                  {currentSpecialWeek.penaltyRate !== 1 && (
+                    <span className="bg-red-100 text-red-700 px-2 py-0.5 rounded">
+                      Phạt x{currentSpecialWeek.penaltyRate}
                     </span>
                   )}
-                  {currentSpecialWeek.fineRate !== 1 && (
-                    <span className="bg-white/50 px-2 py-0.5 rounded">
-                      Tiền x{currentSpecialWeek.fineRate}
+                  {currentSpecialWeek.bonusRate !== 1 && (
+                    <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded">
+                      Thưởng x{currentSpecialWeek.bonusRate}
                     </span>
                   )}
                 </div>
@@ -4227,8 +4232,8 @@ const Dashboard = ({ currentUser, onLogout, dbState, updateData }) => {
                         {currentSpecialWeek.name}
                       </p>
                       <p className="text-xs text-yellow-700">
-                        Điểm x{currentSpecialWeek.pointRate} | Tiền x
-                        {currentSpecialWeek.fineRate}
+                        Phạt x{currentSpecialWeek.penaltyRate} | Thưởng x
+                        {currentSpecialWeek.bonusRate}
                       </p>
                     </div>
                     <button
