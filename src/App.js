@@ -2238,8 +2238,10 @@ const LoginScreen = ({ dbState, onLogin, updateData }) => {
           </div>
         )}
         <div className="text-center mb-6">
-          <h1 className="text-2xl font-bold text-gray-800">Lớp Học Vui Vẻ</h1>
-          <p className="text-gray-500 text-sm">Năm học mới & Danh sách mới</p>
+          <h1 className="text-2xl font-bold text-gray-800">
+            Thống kê tình hình 12/4
+          </h1>
+          <p className="text-gray-500 text-sm">By Banana</p>
         </div>
         {!selectedUser ? (
           <>
